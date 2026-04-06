@@ -67,7 +67,7 @@
         <div class="modal-sheet">
           <button class="modal-close" @click="closeModal">✕</button>
           <div class="modal-img-wrap">
-            <img :src="modalItem.image_url || 'https://via.placeholder.com/400x200/e3f2fd/1e88e5?text=🧋'" :alt="modalItem.name" />
+            <img :src="modalItem.image_url || '/products/placeholder.webp'" :alt="modalItem.name" />
           </div>
           <div class="modal-body">
             <h3 class="modal-title">{{ modalItem.name }}</h3>
@@ -350,7 +350,7 @@ function addToCart() {
   font-size: 14px; cursor: pointer; z-index: 1;
   display: flex; align-items: center; justify-content: center;
 }
-.modal-img-wrap { width: 100%; aspect-ratio: 2/1; overflow: hidden; }
+.modal-img-wrap { width: 100%; aspect-ratio: 1; overflow: hidden; background: var(--blue-light); display: flex; align-items: center; justify-content: center; }
 .modal-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
 .modal-body { padding: 20px 16px; }
 .modal-title { font-size: 20px; font-weight: 700; }
