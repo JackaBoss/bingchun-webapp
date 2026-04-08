@@ -38,6 +38,31 @@ const routes = [
     component: () => import('@/views/ProfileView.vue'),
     meta: { requiresAuth: true },
   },
+  // Admin routes
+  {
+    path: '/admin',
+    name: 'AdminDashboard',
+    component: () => import('@/views/admin/DashboardView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/orders',
+    name: 'AdminOrders',
+    component: () => import('@/views/admin/OrdersView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/orders/:id',
+    name: 'AdminOrderDetail',
+    component: () => import('@/views/admin/OrderDetailView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/menu',
+    name: 'AdminMenu',
+    component: () => import('@/views/admin/MenuView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
 ]
 
 const router = createRouter({
@@ -45,11 +70,13 @@ const router = createRouter({
   routes,
 })
 
-// Guard: redirect to /login if not authenticated
 router.beforeEach((to) => {
   const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.isLoggedIn) {
     return { name: 'Login' }
+  }
+  if (to.meta.requiresAdmin && auth.user?.role !== 'admin') {
+    return { name: 'Menu' }
   }
   if (to.meta.public && auth.isLoggedIn) {
     return { name: 'Menu' }
