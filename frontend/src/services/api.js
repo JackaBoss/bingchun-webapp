@@ -7,6 +7,7 @@ const client = axios.create({ baseURL: BASE_URL })
 // Attach access token to every request
 client.interceptors.request.use(config => {
   const token = localStorage.getItem('accessToken')
+  config.headers = config.headers || {}
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -30,6 +31,7 @@ client.interceptors.response.use(
         return new Promise((resolve, reject) => {
           waitingQueue.push({ resolve, reject })
         }).then(token => {
+          original.headers = original.headers || {}
           original.headers.Authorization = `Bearer ${token}`
           return client(original)
         })
@@ -46,6 +48,7 @@ client.interceptors.response.use(
         waitingQueue.forEach(p => p.resolve(data.accessToken))
         waitingQueue = []
 
+        original.headers = original.headers || {}
         original.headers.Authorization = `Bearer ${data.accessToken}`
         return client(original)
       } catch {
@@ -66,6 +69,7 @@ client.interceptors.response.use(
 const api = {
   get:    (url, params) => client.get(url, { params }),
   post:   (url, data)   => client.post(url, data),
+  patch:  (url, data)   => client.patch(url, data),
   put:    (url, data)   => client.put(url, data),
   delete: (url)         => client.delete(url),
 }
