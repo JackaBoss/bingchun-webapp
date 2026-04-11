@@ -3,6 +3,9 @@
     <div class="page-header">
       <button class="back-btn" @click="router.push('/orders')">←</button>
       <h2>Order Detail</h2>
+      <div class="poll-indicator" :class="{ active: isPolling }" title="Live updates on">
+        <span class="poll-dot" />
+      </div>
     </div>
 
     <div v-if="loading" class="loading-state">
@@ -13,10 +16,11 @@
       <!-- Status banner -->
       <div :class="['status-banner', `status-${order.status}`]">
         <span class="status-icon">{{ statusIcon }}</span>
-        <div>
+        <div class="status-text">
           <p class="status-label">{{ statusLabel }}</p>
           <p class="order-no">{{ order.order_no }}</p>
         </div>
+        <div v-if="isPolling" class="live-badge">LIVE</div>
       </div>
 
       <!-- Items -->
@@ -66,27 +70,47 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import api from '@/services/api'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
 const route  = useRoute()
+const toast  = useToast()
 
 const order   = ref(null)
 const loading = ref(true)
 
+// Statuses where order is still active — keep polling
+const ACTIVE_STATUSES = ['pending', 'paid', 'preparing']
+const POLL_INTERVAL   = 60_000 // 1 minute
+
+let pollTimer = null
+
+const isPolling = computed(() =>
+  order.value && ACTIVE_STATUSES.includes(order.value.status)
+)
+
 const statusMap = {
-  pending:    { label: 'Waiting for payment',  icon: '⏳' },
-  paid:       { label: 'Payment confirmed',     icon: '✅' },
-  preparing:  { label: 'Preparing your order', icon: '👨‍🍳' },
-  ready:      { label: 'Ready for pickup!',    icon: '🎉' },
-  completed:  { label: 'Completed',            icon: '✓'  },
-  cancelled:  { label: 'Cancelled',            icon: '✕'  },
+  pending:   { label: 'Waiting for payment',  icon: '⏳' },
+  paid:      { label: 'Payment confirmed',     icon: '✅' },
+  preparing: { label: 'Preparing your order', icon: '👨‍🍳' },
+  ready:     { label: 'Ready for pickup!',    icon: '🎉' },
+  completed: { label: 'Completed',            icon: '✓'  },
+  cancelled: { label: 'Cancelled',            icon: '✕'  },
 }
 
 const statusLabel = computed(() => statusMap[order.value?.status]?.label || order.value?.status)
-const statusIcon  = computed(() => statusMap[order.value?.status]?.icon || '📋')
+const statusIcon  = computed(() => statusMap[order.value?.status]?.icon  || '📋')
+
+const statusToast = {
+  paid:      { message: '✅ Payment confirmed!',     type: 'success' },
+  preparing: { message: '👨‍🍳 Your order is being prepared', type: 'info' },
+  ready:     { message: '🎉 Your order is ready for pickup!', type: 'success' },
+  completed: { message: 'Order completed. Thank you!', type: 'success' },
+  cancelled: { message: 'Order was cancelled.',        type: 'error'   },
+}
 
 function formatDate(dt) {
   return new Date(dt).toLocaleString('en-MY', {
@@ -95,30 +119,74 @@ function formatDate(dt) {
   })
 }
 
-onMounted(async () => {
+async function fetchOrder(showToastOnChange = false) {
   try {
-    order.value = await api.get(`/orders/${route.params.id}`)
+    const fresh = await api.get(`/orders/${route.params.id}`)
+    if (showToastOnChange && order.value && fresh.status !== order.value.status) {
+      const t = statusToast[fresh.status]
+      if (t) toast.show(t)
+    }
+    order.value = fresh
+
+    // Stop polling once order is in a terminal state
+    if (!ACTIVE_STATUSES.includes(fresh.status)) {
+      stopPolling()
+    }
   } catch (e) {
     console.error(e)
-  } finally {
-    loading.value = false
   }
+}
+
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(() => fetchOrder(true), POLL_INTERVAL)
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+
+onMounted(async () => {
+  await fetchOrder(false)
+  loading.value = false
+  if (isPolling.value) startPolling()
 })
+
+onUnmounted(() => stopPolling())
 </script>
 
 <style scoped>
 .order-detail-page { background: var(--bg); min-height: 100vh; padding-bottom: 80px; }
+
 .page-header {
   display: flex; align-items: center; gap: 12px;
   padding: 16px; background: var(--white);
   border-bottom: 1px solid var(--border);
 }
 .back-btn { background: none; border: none; font-size: 20px; cursor: pointer; }
-.page-header h2 { font-size: 18px; font-weight: 700; }
+.page-header h2 { font-size: 18px; font-weight: 700; flex: 1; }
+
+/* Live indicator dot in header */
+.poll-indicator { display: flex; align-items: center; }
+.poll-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border);
+  transition: background 0.3s;
+}
+.poll-indicator.active .poll-dot {
+  background: #27AE60;
+  box-shadow: 0 0 0 3px rgba(39,174,96,0.2);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(39,174,96,0.2); }
+  50%       { box-shadow: 0 0 0 6px rgba(39,174,96,0.05); }
+}
 
 .loading-state { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .skeleton { height: 60px; border-radius: var(--radius); background: #f0f0f0; }
 
+/* Status banner */
 .status-banner {
   margin: 12px 16px; padding: 16px;
   border-radius: var(--radius); display: flex; align-items: center; gap: 14px;
@@ -129,16 +197,30 @@ onMounted(async () => {
 .status-banner.status-ready     { background: #e8f5e9; }
 .status-banner.status-completed { background: var(--bg); }
 .status-banner.status-cancelled { background: #ffebee; }
-.status-icon  { font-size: 32px; }
+
+.status-icon  { font-size: 32px; flex-shrink: 0; }
+.status-text  { flex: 1; }
 .status-label { font-size: 16px; font-weight: 700; }
 .order-no     { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+.live-badge {
+  font-size: 10px; font-weight: 800;
+  background: #27AE60; color: #fff;
+  padding: 3px 8px; border-radius: 6px;
+  letter-spacing: 0.5px;
+  animation: pulse-badge 2s infinite;
+}
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
 
 .section-card { margin: 12px 16px; }
 .section-label { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
 
 .order-item-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .order-item-row:last-child { border-bottom: none; }
-.order-item-info { flex: 1; }
+.order-item-info  { flex: 1; }
 .order-item-name  { font-size: 14px; font-weight: 600; }
 .order-item-opts  { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .order-item-notes { font-size: 12px; color: var(--text-muted); margin-top: 2px; }

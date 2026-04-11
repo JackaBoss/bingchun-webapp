@@ -1,18 +1,12 @@
 <template>
   <div id="app">
-    <!-- Bottom nav only shows when logged in -->
     <router-view />
-    <BottomNav v-if="isLoggedIn" />
+    <ToastContainer />
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import BottomNav from '@/components/BottomNav.vue'
-
-const auth = useAuthStore()
-const isLoggedIn = computed(() => !!auth.user)
+import ToastContainer from '@/components/ToastContainer.vue'
 </script>
 
 <style>
@@ -38,7 +32,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
-  max-width: 480px;        /* mobile max width */
+  max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
   position: relative;
@@ -46,7 +40,6 @@ body {
 
 #app { padding-bottom: var(--nav-height); }
 
-/* Utility classes */
 .btn {
   display: inline-flex;
   align-items: center;
