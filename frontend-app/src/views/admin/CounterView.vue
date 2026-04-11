@@ -247,6 +247,7 @@ function reset() {
 .input-row { display: flex; gap: 10px; }
 .main-input {
   flex: 1;
+  min-width: 0;
   padding: 15px 18px;
   font-size: 18px;
   border: 2px solid #E8ECF0;
@@ -254,7 +255,6 @@ function reset() {
   outline: none;
   color: #1A1A2E;
   transition: border-color 0.2s;
-  width: 100%;
   box-sizing: border-box;
 }
 .main-input:focus { border-color: #5B8AF0; }

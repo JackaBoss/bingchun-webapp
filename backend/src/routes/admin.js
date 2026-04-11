@@ -318,3 +318,19 @@ router.get('/member-lookup', requireAdmin, async (req, res) => {
     current_points: member.points,
   })
 })
+
+// ── GET /api/admin/members ─────────────────────────────────────
+router.get('/members', requireAdmin, async (req, res) => {
+  try {
+    const [members] = await db.query(
+      `SELECT id, name, phone, points, tier, created_at
+       FROM users
+       WHERE role = 'member'
+       ORDER BY created_at DESC`
+    )
+    res.json(members)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
