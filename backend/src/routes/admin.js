@@ -228,3 +228,93 @@ router.get('/orders/:id/receipt', requireAdmin, async (req, res) => {
 });
 
 module.exports = router;
+
+
+// ── POST /api/admin/credit-points ─────────────────────────────
+// Staff credits walk-in points by phone number + bill amount
+router.post('/credit-points', requireAdmin, async (req, res) => {
+  const { phone, bill_amount, note } = req.body
+
+  if (!phone || !bill_amount) {
+    return res.status(400).json({ error: 'Phone and bill_amount required' })
+  }
+
+  const amount = parseFloat(bill_amount)
+  if (isNaN(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Invalid bill amount' })
+  }
+
+  try {
+    // Find member by phone
+    const [[member]] = await db.query(
+      'SELECT id, name, phone, points, tier FROM users WHERE phone = ? AND role = "member"',
+      [phone]
+    )
+
+    if (!member) {
+      return res.status(404).json({ error: 'Member not found' })
+    }
+
+    const EARN = parseInt(process.env.POINTS_PER_RINGGIT) || 1
+    const pointsEarned = Math.floor(amount * EARN)
+
+    // Credit points + log transaction in one go
+    await db.query('START TRANSACTION')
+    try {
+      await db.query(
+        'UPDATE users SET points = points + ? WHERE id = ?',
+        [pointsEarned, member.id]
+      )
+      await db.query(
+        `INSERT INTO points_transactions 
+         (user_id, points, type, source, bill_amount, staff_note, created_at)
+         VALUES (?, ?, 'earn', 'walkin', ?, ?, NOW())`,
+        [member.id, pointsEarned, amount, note || 'Walk-in sale']
+      )
+      await db.query('COMMIT')
+    } catch (e) {
+      await db.query('ROLLBACK')
+      throw e
+    }
+
+    const [[updated]] = await db.query(
+      'SELECT points FROM users WHERE id = ?',
+      [member.id]
+    )
+
+    res.json({
+      success: true,
+      member: {
+        name: member.name,
+        phone: member.phone,
+        tier: member.tier,
+      },
+      points_earned: pointsEarned,
+      new_balance: updated.points,
+    })
+
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// ── GET /api/admin/member-lookup?phone=XXX ────────────────────
+router.get('/member-lookup', requireAdmin, async (req, res) => {
+  const { phone } = req.query
+  if (!phone) return res.status(400).json({ error: 'Phone required' })
+
+  const [[member]] = await db.query(
+    'SELECT id, name, phone, points, tier FROM users WHERE phone = ? AND role = "member"',
+    [phone]
+  )
+  if (!member) return res.status(404).json({ error: 'Member not found. Ask them to register first.' })
+
+  res.json({
+    id: member.id,
+    name: member.name,
+    phone: member.phone,
+    tier: member.tier,
+    current_points: member.points,
+  })
+})

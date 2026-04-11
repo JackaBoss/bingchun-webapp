@@ -63,6 +63,12 @@ const routes = [
     component: () => import('@/views/admin/MenuView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true },
   },
+  {
+  path: '/admin/counter',
+  name: 'AdminCounter',
+  component: () => import('@/views/admin/CounterView.vue'),
+  meta: { requiresAuth: true, requiresAdmin: true },
+  }
 ]
 
 const router = createRouter({
