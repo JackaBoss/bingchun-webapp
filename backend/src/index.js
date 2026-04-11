@@ -11,8 +11,20 @@ const adminRoutes  = require('./routes/admin');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+// Support multiple allowed origins via comma-separated ALLOWED_ORIGINS env var
+// Falls back to FRONTEND_URL for backward compat, then allows all
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : (process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : null);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: allowedOrigins
+    ? (origin, cb) => {
+        // Allow requests with no origin (mobile apps, curl, etc)
+        if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+        cb(new Error(`CORS: ${origin} not allowed`));
+      }
+    : '*',
   credentials: true,
 }));
 app.use(express.json());
