@@ -32,12 +32,15 @@
         </div>
       </div>
     </div>
+
+    <BottomNav />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import BottomNav from '@/components/BottomNav.vue'
 import api from '@/services/api'
 
 const router = useRouter()
@@ -60,7 +63,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.orders-page { background: var(--bg); min-height: 100vh; }
+.orders-page { background: var(--bg); min-height: 100vh; padding-bottom: 80px; }
 .page-header { padding: 20px 16px 12px; background: var(--white); border-bottom: 1px solid var(--border); }
 .page-header h2 { font-size: 20px; font-weight: 700; }
 

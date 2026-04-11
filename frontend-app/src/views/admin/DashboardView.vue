@@ -34,6 +34,9 @@
         <button class="admin-nav-btn" @click="router.push('/admin/menu')">
           <span class="nav-emoji">&#129379;</span> Manage Menu
         </button>
+        <button class="admin-nav-btn" @click="router.push('/admin/counter')">
+          <span class="nav-emoji">🧾</span> Walk-in Points
+        </button>
       </div>
 
       <div class="section">
