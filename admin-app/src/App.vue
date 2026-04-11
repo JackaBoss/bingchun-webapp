@@ -227,10 +227,11 @@ tr:hover td { background: #fafafa; }
 
 /* Form inputs */
 .input {
-  width: 100%; padding: 9px 12px;
+  width: 100%; min-width: 0; padding: 9px 12px;
   border: 1.5px solid var(--border); border-radius: 7px;
   font-size: 14px; outline: none;
   transition: border-color 0.15s;
+  box-sizing: border-box;
 }
 .input:focus { border-color: var(--blue); }
 </style>

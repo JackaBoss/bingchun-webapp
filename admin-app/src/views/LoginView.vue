@@ -62,7 +62,9 @@ async function login() {
 
 <style scoped>
 .login-page {
+  flex: 1;
   min-height: 100vh;
+  width: 100%;
   background: #1a1a2e;
   display: flex;
   align-items: center;
