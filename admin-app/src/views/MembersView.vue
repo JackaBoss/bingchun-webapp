@@ -21,6 +21,7 @@
               <th>Points</th>
               <th>Value</th>
               <th>Joined</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -36,6 +37,11 @@
               <td><strong>{{ m.points }}</strong> pts</td>
               <td class="text-muted">≈ RM {{ (m.points * 0.01).toFixed(2) }}</td>
               <td class="text-muted">{{ formatDate(m.created_at) }}</td>
+              <td>
+                <router-link :to="`/members/${m.id}`" class="btn btn-ghost" style="font-size:12px;padding:5px 10px">
+                  History
+                </router-link>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -65,16 +71,20 @@ function formatDate(dt) {
 }
 
 onMounted(async () => {
-  try { members.value = await api.get('/admin/members') }
-  catch (e) { console.error(e) }
-  finally { loading.value = false }
+  try {
+    members.value = await api.get('/admin/members')
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 
 <style scoped>
-.empty       { padding: 40px; text-align: center; color: var(--muted); }
-.member-row  { display: flex; align-items: center; gap: 10px; }
-.avatar      { width: 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.fw600       { font-weight: 600; font-size: 13px; }
-.text-muted  { color: var(--muted); font-size: 13px; }
+.empty      { padding: 40px; text-align: center; color: var(--muted); }
+.member-row { display: flex; align-items: center; gap: 10px; }
+.avatar     { width: 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.fw600      { font-weight: 600; font-size: 13px; }
+.text-muted { color: var(--muted); font-size: 13px; }
 </style>
