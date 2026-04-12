@@ -38,18 +38,38 @@
           <span class="points-balance">Balance: {{ auth.points }} pts</span>
         </div>
         <div class="points-slider-row">
-          <input
-            type="range" min="0"
-            :max="maxRedeemable"
-            step="10"
-            v-model.number="redeemPoints"
-            class="points-slider"
-          />
+          <input type="range" min="0" :max="maxRedeemable" step="10"
+            v-model.number="redeemPoints" class="points-slider" />
           <span class="redeem-val">{{ redeemPoints }} pts</span>
         </div>
         <p class="redeem-saving" v-if="redeemPoints > 0">
           💰 Saving RM {{ (redeemPoints * REDEEM_RATE).toFixed(2) }}
         </p>
+      </div>
+
+      <!-- Voucher -->
+      <div class="card section-card">
+        <p class="section-label">🎫 Voucher Code</p>
+        <div v-if="!voucher.applied">
+          <div style="display:flex;gap:8px">
+            <input v-model="voucher.code" type="text" class="voucher-input" placeholder="Enter code"
+              style="text-transform:uppercase" :disabled="voucher.loading" @keyup.enter="applyVoucher" />
+            <button class="btn btn-primary" style="padding:10px 16px" :disabled="voucher.loading||!voucher.code.trim()" @click="applyVoucher">
+              {{ voucher.loading ? '…' : 'Apply' }}
+            </button>
+          </div>
+          <p v-if="voucher.error" style="font-size:12px;color:#dc2626;margin-top:6px">{{ voucher.error }}</p>
+        </div>
+        <div v-else class="voucher-applied">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:20px">🎫</span>
+            <div>
+              <div style="font-size:14px;font-weight:800;letter-spacing:1px;color:#166534">{{ voucher.code }}</div>
+              <div style="font-size:12px;color:#16a34a;margin-top:1px">{{ voucher.result.label }}</div>
+            </div>
+          </div>
+          <button @click="removeVoucher" style="background:none;border:none;color:#aaa;cursor:pointer;font-size:16px">✕</button>
+        </div>
       </div>
 
       <!-- Order notes -->
@@ -65,6 +85,13 @@
         <div class="summary-row discount" v-if="redeemPoints > 0">
           <span>Points discount</span>
           <span>−RM {{ pointsDiscount.toFixed(2) }}</span>
+        </div>
+        <div class="summary-row discount" v-if="voucher.applied && voucherDiscount > 0">
+          <span>Voucher ({{ voucher.code }})</span>
+          <span>−RM {{ voucherDiscount.toFixed(2) }}</span>
+        </div>
+        <div v-if="voucher.applied && voucher.result.type === 'points_multiplier'" class="summary-row" style="color:#7c3aed">
+          <span>Points multiplier</span><span>{{ voucher.result.value }}×</span>
         </div>
         <div class="summary-row total"><span>Total</span><span>RM {{ finalTotal.toFixed(2) }}</span></div>
         <div class="summary-row earn" v-if="pointsWillEarn > 0">
@@ -84,7 +111,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart'
 import { useAuthStore } from '@/stores/auth'
@@ -94,13 +121,17 @@ const router = useRouter()
 const cart   = useCartStore()
 const auth   = useAuthStore()
 
-const REDEEM_RATE   = 0.01   // RM per point
-const POINTS_PER_RM = 1      // points earned per RM spent
+const REDEEM_RATE  = 0.01
+const POINTS_PER_RM = 1
 
 const redeemPoints = ref(0)
 const orderNotes   = ref('')
 const placing      = ref(false)
 const errorMsg     = ref('')
+
+const voucher = reactive({
+  code: '', loading: false, error: '', applied: false, result: null,
+})
 
 const maxRedeemable = computed(() => {
   const maxByPoints = auth.points
@@ -108,92 +139,103 @@ const maxRedeemable = computed(() => {
   return Math.min(maxByPoints, maxByTotal)
 })
 
-const pointsDiscount = computed(() => redeemPoints.value * REDEEM_RATE)
-const finalTotal     = computed(() => Math.max(0, cart.subtotal - pointsDiscount.value))
-const pointsWillEarn = computed(() => Math.floor(finalTotal.value * POINTS_PER_RM))
+const pointsDiscount  = computed(() => redeemPoints.value * REDEEM_RATE)
+const voucherDiscount = computed(() => voucher.applied && voucher.result ? voucher.result.discount_amount : 0)
+const finalTotal      = computed(() => Math.max(0, cart.subtotal - pointsDiscount.value - voucherDiscount.value))
+const pointsWillEarn  = computed(() => {
+  const base = Math.floor(finalTotal.value * POINTS_PER_RM)
+  const mult = voucher.applied && voucher.result?.points_multiplier ? voucher.result.points_multiplier : 1
+  return Math.floor(base * mult)
+})
+
+async function applyVoucher() {
+  if (!voucher.code.trim()) return
+  voucher.loading = true; voucher.error = ''
+  try {
+    const res = await api.post('/vouchers/validate', {
+      code: voucher.code.trim().toUpperCase(),
+      subtotal: cart.subtotal,
+    })
+    voucher.result  = res
+    voucher.applied = true
+    voucher.code    = voucher.code.trim().toUpperCase()
+  } catch (e) {
+    voucher.error = e.response?.data?.message || e.response?.data?.error || 'Invalid voucher code'
+  } finally { voucher.loading = false }
+}
+
+function removeVoucher() {
+  voucher.applied = false; voucher.result = null; voucher.code = ''; voucher.error = ''
+}
 
 async function placeOrder() {
-  placing.value  = true
-  errorMsg.value = ''
+  placing.value = true; errorMsg.value = ''
   try {
     const payload = cart.toOrderPayload(redeemPoints.value, orderNotes.value)
-    const order   = await api.post('/orders', payload)
+    // Attach voucher discount to order total reduction
+    if (voucher.applied && voucherDiscount.value > 0) {
+      payload.voucher_code     = voucher.code
+      payload.voucher_discount = voucherDiscount.value
+    }
+    const order = await api.post('/orders', payload)
+
+    // Record voucher redemption after order placed
+    if (voucher.applied && voucher.result?.voucher_id) {
+      try {
+        await api.post('/vouchers/redeem', {
+          voucher_id:       voucher.result.voucher_id,
+          order_id:         order.id,
+          discount_applied: voucherDiscount.value,
+        })
+      } catch (_) { /* non-fatal */ }
+    }
+
     cart.clear()
     await auth.refreshMe()
     router.push(`/orders/${order.id}`)
   } catch (err) {
     errorMsg.value = err.error || 'Failed to place order. Please try again.'
-  } finally {
-    placing.value = false
-  }
+  } finally { placing.value = false }
 }
 </script>
 
 <style scoped>
-.cart-page { padding: 0 0 120px; background: var(--bg); min-height: 100vh; }
-
-.page-header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 16px; background: var(--white);
-  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
-}
-.back-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text); }
-.page-header h2 { font-size: 18px; font-weight: 700; }
-
-.empty-state { text-align: center; padding: 60px 24px; }
-.empty-icon  { font-size: 56px; margin-bottom: 16px; }
-.empty-title { font-size: 18px; font-weight: 700; }
-.empty-sub   { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
-
-.cart-items { background: var(--white); margin: 12px 0; }
-.cart-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 16px; border-bottom: 1px solid var(--border);
-}
+.cart-page       { padding: 0 0 120px; background: var(--bg); min-height: 100vh; }
+.page-header     { display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--white); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+.back-btn        { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text); }
+.page-header h2  { font-size: 18px; font-weight: 700; }
+.empty-state     { text-align: center; padding: 60px 24px; }
+.empty-icon      { font-size: 56px; margin-bottom: 16px; }
+.empty-title     { font-size: 18px; font-weight: 700; }
+.empty-sub       { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
+.cart-items      { background: var(--white); margin: 12px 0; }
+.cart-item       { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .cart-item:last-child { border-bottom: none; }
-.cart-item-info { flex: 1; }
+.cart-item-info  { flex: 1; }
 .cart-item-name  { font-size: 15px; font-weight: 600; }
 .cart-item-opts  { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
 .cart-item-notes { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
 .cart-item-price { font-size: 14px; font-weight: 700; color: var(--blue); margin-top: 6px; }
-.cart-item-qty {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--bg); border-radius: var(--radius-sm); padding: 6px 12px;
-}
+.cart-item-qty   { display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: var(--radius-sm); padding: 6px 12px; }
 .cart-item-qty button { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--blue); font-weight: 700; }
 .cart-item-qty span   { font-size: 15px; font-weight: 700; min-width: 20px; text-align: center; }
-
-.section-card { margin: 12px 16px; }
-.section-label { font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-
-.points-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
-.points-balance { font-size: 13px; color: var(--blue); font-weight: 600; }
+.section-card    { margin: 12px 16px; }
+.section-label   { font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.points-header   { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.points-balance  { font-size: 13px; color: var(--blue); font-weight: 600; }
 .points-slider-row { display: flex; align-items: center; gap: 12px; }
-.points-slider { flex: 1; accent-color: var(--blue); }
-.redeem-val    { font-size: 14px; font-weight: 700; color: var(--blue); min-width: 60px; text-align: right; }
-.redeem-saving { font-size: 13px; color: #2e7d32; font-weight: 600; margin-top: 8px; }
-
-.notes-input {
-  width: 100%; padding: 10px; border: 1.5px solid var(--border);
-  border-radius: var(--radius-sm); font-size: 14px; resize: none; font-family: inherit;
-}
+.points-slider   { flex: 1; accent-color: var(--blue); }
+.redeem-val      { font-size: 14px; font-weight: 700; color: var(--blue); min-width: 60px; text-align: right; }
+.redeem-saving   { font-size: 13px; color: #2e7d32; font-weight: 600; margin-top: 8px; }
+.voucher-input   { flex: 1; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 14px; font-weight: 700; letter-spacing: 1px; outline: none; }
+.voucher-input:focus { border-color: var(--blue); }
+.voucher-applied { display: flex; align-items: center; justify-content: space-between; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; padding: 12px 14px; }
+.notes-input     { width: 100%; padding: 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; resize: none; font-family: inherit; }
 .notes-input:focus { outline: none; border-color: var(--blue); }
-
-.summary-card { }
-.summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
+.summary-row     { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
 .summary-row.discount span { color: #2e7d32; font-weight: 600; }
-.summary-row.total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 12px; font-size: 16px; font-weight: 700; }
-.summary-row.earn span { color: var(--blue); font-size: 13px; font-weight: 600; }
-
-.checkout-bar {
-  position: fixed; bottom: 64px;
-  left: 50%; transform: translateX(-50%);
-  width: calc(100% - 32px); max-width: 448px;
-  padding: 12px 0; z-index: 50;
-}
-.error-msg {
-  color: #e53e3e; font-size: 13px; text-align: center;
-  margin-top: 8px; padding: 8px; background: #fff5f5;
-  border-radius: var(--radius-sm);
-}
+.summary-row.total       { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 12px; font-size: 16px; font-weight: 700; }
+.summary-row.earn span   { color: var(--blue); font-size: 13px; font-weight: 600; }
+.checkout-bar    { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); width: calc(100% - 32px); max-width: 448px; padding: 12px 0; z-index: 50; }
+.error-msg       { color: #e53e3e; font-size: 13px; text-align: center; margin-top: 8px; padding: 8px; background: #fff5f5; border-radius: var(--radius-sm); }
 </style>

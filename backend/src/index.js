@@ -1,18 +1,16 @@
 require('dotenv').config();
-const express = require('express');
-const cors    = require('cors');
-
+const express      = require('express');
+const cors         = require('cors');
 const authRoutes   = require('./routes/auth');
 const menuRoutes   = require('./routes/menu');
 const orderRoutes  = require('./routes/orders');
 const pointRoutes  = require('./routes/points');
 const adminRoutes  = require('./routes/admin');
+const voucherRoutes = require('./routes/vouchers');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// Support multiple allowed origins via comma-separated ALLOWED_ORIGINS env var
-// Falls back to FRONTEND_URL for backward compat, then allows all
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
   : (process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : null);
@@ -20,22 +18,24 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 app.use(cors({
   origin: allowedOrigins
     ? (origin, cb) => {
-        // Allow requests with no origin (mobile apps, curl, etc)
         if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
         cb(new Error(`CORS: ${origin} not allowed`));
       }
     : '*',
   credentials: true,
 }));
-app.use(express.json());
 
-app.use('/api/auth',   authRoutes);
-app.use('/api/menu',   menuRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/points', pointRoutes);
-app.use('/api/admin',  adminRoutes);
+app.use(express.json({ limit: '10mb' }));
+
+app.use('/api/auth',     authRoutes);
+app.use('/api/menu',     menuRoutes);
+app.use('/api/orders',   orderRoutes);
+app.use('/api/points',   pointRoutes);
+app.use('/api/admin',    adminRoutes);
+app.use('/api',          voucherRoutes);   // mounts /api/vouchers/* and /api/admin/vouchers/*
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
+
 app.use((req, res) => res.status(404).json({ error: `Route ${req.path} not found` }));
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
@@ -44,5 +44,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
 });
