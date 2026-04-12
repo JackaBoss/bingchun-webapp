@@ -1,93 +1,156 @@
 <template>
-  <div class="page">
-    <div class="page-header" style="display:flex;align-items:center;gap:16px">
-      <button class="btn btn-ghost" @click="$router.back()">← Back</button>
-      <div>
-        <h1 class="page-title" style="margin:0">{{ member?.name || 'Member History' }}</h1>
-        <p class="page-sub" style="margin:0">{{ member?.phone }}</p>
+  <div class="cmd-page">
+
+    <!-- ── HEADER ──────────────────────────────────────────────────── -->
+    <div class="cmd-header">
+      <button class="back-btn" @click="$router.back()">← Members</button>
+
+      <div v-if="member" class="member-ident">
+        <div class="member-avatar">{{ member.name.charAt(0).toUpperCase() }}</div>
+        <div>
+          <div class="member-name">{{ member.name }}</div>
+          <div class="member-sub">{{ member.phone }} · <span :class="`tier-${member.tier}`">{{ member.tier }}</span></div>
+        </div>
+        <router-link :to="`/members/${member.id}/edit`" class="edit-link">Edit Profile →</router-link>
       </div>
     </div>
 
-    <div v-if="loading" class="loading">Loading…</div>
-    <div v-else-if="error" class="error-msg">{{ error }}</div>
+    <div v-if="loading" class="cmd-loading">Loading…</div>
+    <div v-else-if="error" class="cmd-error">{{ error }}</div>
 
     <template v-else>
-      <div class="stats-row">
-        <div class="stat-card">
-          <div class="stat-num">{{ stats.total_visits || 0 }}</div>
-          <div class="stat-lbl">Total Visits</div>
+
+      <!-- ── KPI STRIP ─────────────────────────────────────────────── -->
+      <div class="kpi-strip">
+        <div class="kpi">
+          <div class="kpi-value">{{ stats.total_visits || 0 }}</div>
+          <div class="kpi-label">Total Visits</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-num">RM{{ parseFloat(stats.total_spend || 0).toFixed(2) }}</div>
-          <div class="stat-lbl">Total Spend</div>
+        <div class="kpi-divider"></div>
+        <div class="kpi">
+          <div class="kpi-value">RM{{ parseFloat(stats.total_spend || 0).toFixed(2) }}</div>
+          <div class="kpi-label">Lifetime Spend</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-num">RM{{ parseFloat(stats.avg_bill || 0).toFixed(2) }}</div>
-          <div class="stat-lbl">Avg Bill</div>
+        <div class="kpi-divider"></div>
+        <div class="kpi">
+          <div class="kpi-value">RM{{ parseFloat(stats.avg_bill || 0).toFixed(2) }}</div>
+          <div class="kpi-label">Avg Bill</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-num">{{ member.points }}</div>
-          <div class="stat-lbl">Points</div>
+        <div class="kpi-divider"></div>
+        <div class="kpi">
+          <div class="kpi-value accent">{{ member.points }}</div>
+          <div class="kpi-label">Points Balance</div>
+        </div>
+        <div class="kpi-divider"></div>
+        <div class="kpi">
+          <div class="kpi-value">{{ stats.last_visit ? fmtDate(stats.last_visit) : '—' }}</div>
+          <div class="kpi-label">Last Visit</div>
         </div>
       </div>
 
-      <div class="two-col">
-        <div class="card">
-          <h3 class="section-title">🏆 Favourite Items</h3>
-          <div v-if="!ranking.length" class="no-data">No item data yet — add items when crediting points.</div>
-          <div v-else class="ranking-list">
-            <div v-for="(item, idx) in ranking" :key="idx" class="rank-row">
-              <div class="rank-num" :class="['r1','r2','r3'][idx] || 'rn'">{{ idx + 1 }}</div>
-              <div class="rank-info">
-                <div class="rank-name">{{ item.item_name }}</div>
-                <div class="rank-sub">{{ item.order_count }} visit(s) · last {{ fmtDate(item.last_ordered) }}</div>
+      <!-- ── MAIN GRID ─────────────────────────────────────────────── -->
+      <div class="cmd-grid">
+
+        <!-- LEFT: Top 5 Items ─────────────────────────────────────── -->
+        <div class="panel panel-dark">
+          <div class="panel-header">
+            <span class="panel-icon">🏆</span>
+            <span class="panel-title">TOP 5 ITEMS</span>
+          </div>
+
+          <div v-if="!ranking.length" class="panel-empty">
+            No item data yet.<br>Add items when crediting walk-in points.
+          </div>
+
+          <div v-else class="top5-list">
+            <div v-for="(item, idx) in ranking" :key="idx" class="top5-row">
+
+              <!-- Rank medal -->
+              <div class="medal" :class="`medal-${idx+1}`">
+                <span v-if="idx === 0">🥇</span>
+                <span v-else-if="idx === 1">🥈</span>
+                <span v-else-if="idx === 2">🥉</span>
+                <span v-else class="medal-num">{{ idx + 1 }}</span>
               </div>
-              <div class="rank-right">
-                <div class="rank-qty">×{{ item.total_qty }}</div>
-                <div class="rank-spend">RM{{ parseFloat(item.total_spend).toFixed(2) }}</div>
+
+              <!-- Bar + info -->
+              <div class="top5-info">
+                <div class="top5-name">{{ item.item_name }}</div>
+                <div class="top5-bar-wrap">
+                  <div class="top5-bar" :style="{ width: barWidth(item.total_qty) + '%' }"></div>
+                </div>
+                <div class="top5-sub">
+                  {{ item.order_count }} visit{{ item.order_count !== 1 ? 's' : '' }} &nbsp;·&nbsp;
+                  last {{ fmtDate(item.last_ordered) }}
+                </div>
+              </div>
+
+              <!-- Qty + spend -->
+              <div class="top5-stats">
+                <div class="top5-qty">×{{ item.total_qty }}</div>
+                <div class="top5-spend">RM{{ parseFloat(item.total_spend).toFixed(2) }}</div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="card">
-          <h3 class="section-title">📋 Visit History</h3>
-          <div v-if="!sales.length" class="no-data">No visits recorded yet.</div>
-          <div v-else class="history-list">
-            <div v-for="sale in sales" :key="sale.id" class="history-row"
-              :class="{ expanded: expandedId === sale.id }" @click="toggle(sale.id)">
-              <div class="h-top">
-                <div style="flex:1">
-                  <div class="h-orderno">{{ sale.walkin_order_no }}</div>
-                  <div class="h-date">{{ fmtDatetime(sale.created_at) }}</div>
-                </div>
-                <div style="text-align:right">
-                  <div class="h-amount">RM{{ parseFloat(sale.bill_amount).toFixed(2) }}</div>
-                  <div class="h-pts green">+{{ sale.points_earned }} pts</div>
-                </div>
-                <div class="h-chevron">{{ expandedId === sale.id ? '▲' : '▼' }}</div>
+        <!-- RIGHT: Visit Timeline ────────────────────────────────── -->
+        <div class="panel panel-light">
+          <div class="panel-header">
+            <span class="panel-icon">📋</span>
+            <span class="panel-title">VISIT HISTORY</span>
+            <span class="panel-count">{{ sales.length }} visit{{ sales.length !== 1 ? 's' : '' }}</span>
+          </div>
+
+          <div v-if="!sales.length" class="panel-empty">No visits recorded yet.</div>
+
+          <div v-else class="timeline">
+            <div v-for="sale in sales" :key="sale.id" class="tl-item">
+
+              <!-- Timeline dot + line -->
+              <div class="tl-gutter">
+                <div class="tl-dot"></div>
+                <div class="tl-line"></div>
               </div>
-              <div v-if="expandedId === sale.id" class="h-detail">
-                <div v-if="sale.items && sale.items.length" class="h-items">
-                  <div v-for="(it, i) in sale.items" :key="i" class="h-item">
-                    <span>×{{ it.quantity }} {{ it.item_name }}</span>
-                    <span>RM{{ (it.unit_price * it.quantity).toFixed(2) }}</span>
+
+              <!-- Content -->
+              <div class="tl-card" :class="{ open: expandedId === sale.id }" @click="toggle(sale.id)">
+                <div class="tl-top">
+                  <div class="tl-left">
+                    <div class="tl-orderno">{{ sale.walkin_order_no }}</div>
+                    <div class="tl-date">{{ fmtDatetime(sale.created_at) }}</div>
                   </div>
+                  <div class="tl-right">
+                    <div class="tl-amount">RM{{ parseFloat(sale.bill_amount).toFixed(2) }}</div>
+                    <div class="tl-pts">+{{ sale.points_earned }} pts</div>
+                  </div>
+                  <div class="tl-chevron">{{ expandedId === sale.id ? '▲' : '▼' }}</div>
                 </div>
-                <div v-else class="no-data" style="padding:8px 0;font-size:12px">No items recorded for this visit</div>
-                <div v-if="sale.staff_note" class="h-note">Note: {{ sale.staff_note }}</div>
-                <div v-if="sale.staff_name" class="h-note">Credited by: {{ sale.staff_name }}</div>
+
+                <div v-if="expandedId === sale.id" class="tl-detail">
+                  <div v-if="sale.items?.length" class="tl-items">
+                    <div v-for="(it, i) in sale.items" :key="i" class="tl-item-row">
+                      <span class="tl-item-q">×{{ it.quantity }}</span>
+                      <span class="tl-item-n">{{ it.item_name }}</span>
+                      <span class="tl-item-p">RM{{ (it.unit_price * it.quantity).toFixed(2) }}</span>
+                    </div>
+                  </div>
+                  <div v-else class="tl-no-items">No items recorded for this visit</div>
+                  <div v-if="sale.staff_note" class="tl-note">📝 {{ sale.staff_note }}</div>
+                  <div v-if="sale.staff_name" class="tl-note">👤 Credited by {{ sale.staff_name }}</div>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
       </div>
     </template>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/services/api'
 
@@ -101,6 +164,9 @@ const ranking    = ref([])
 const sales      = ref([])
 const expandedId = ref(null)
 
+const maxQty = computed(() => Math.max(...ranking.value.map(r => r.total_qty), 1))
+const barWidth = (qty) => Math.round((qty / maxQty.value) * 100)
+
 onMounted(async () => {
   try {
     const [historyRes, rankingRes] = await Promise.all([
@@ -109,7 +175,7 @@ onMounted(async () => {
     ])
     member.value  = historyRes.member
     sales.value   = historyRes.sales
-    stats.value   = rankingRes.stats  || {}
+    stats.value   = rankingRes.stats   || {}
     ranking.value = rankingRes.ranking || []
   } catch (e) {
     error.value = e.response?.data?.error || 'Failed to load'
@@ -118,9 +184,8 @@ onMounted(async () => {
   }
 })
 
-function toggle(id) {
-  expandedId.value = expandedId.value === id ? null : id
-}
+function toggle(id) { expandedId.value = expandedId.value === id ? null : id }
+
 function fmtDate(dt) {
   if (!dt) return '—'
   return new Date(dt).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -128,50 +193,96 @@ function fmtDate(dt) {
 function fmtDatetime(dt) {
   if (!dt) return '—'
   return new Date(dt).toLocaleString('en-MY', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-    timeZone: 'Asia/Kuala_Lumpur',
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kuala_Lumpur'
   })
 }
 </script>
 
 <style scoped>
-.page-sub    { color: var(--muted); font-size: 14px; }
-.loading     { padding: 40px; text-align: center; color: var(--muted); }
-.error-msg   { background: #fee2e2; color: #991b1b; padding: 12px 16px; border-radius: 8px; }
-.no-data     { color: var(--muted); font-size: 13px; padding: 16px 0; text-align: center; }
-.stats-row   { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
-.stat-card   { background: #fff; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
-.stat-num    { font-size: 22px; font-weight: 800; color: var(--blue); }
-.stat-lbl    { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
-.two-col     { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-@media (max-width:700px) { .two-col { grid-template-columns: 1fr; } .stats-row { grid-template-columns: repeat(2,1fr); } }
-.section-title { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
-.ranking-list  { display: flex; flex-direction: column; gap: 8px; }
-.rank-row    { display: flex; align-items: center; gap: 12px; padding: 10px; background: #f7f9ff; border-radius: 10px; }
-.rank-num    { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; flex-shrink: 0; }
-.r1 { background: #ffd700; color: #7a5800; }
-.r2 { background: #e0e0e0; color: #555; }
-.r3 { background: #cd7f32; color: #fff; }
-.rn { background: #e0e8ff; color: var(--blue); }
-.rank-info   { flex: 1; }
-.rank-name   { font-size: 14px; font-weight: 600; }
-.rank-sub    { font-size: 11px; color: var(--muted); margin-top: 2px; }
-.rank-right  { text-align: right; }
-.rank-qty    { font-size: 15px; font-weight: 800; color: var(--blue); }
-.rank-spend  { font-size: 11px; color: var(--muted); }
-.history-list { display: flex; flex-direction: column; gap: 6px; }
-.history-row  { border: 1.5px solid #e0e8ff; border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: border-color .15s; }
-.history-row:hover { border-color: var(--blue); }
-.h-top       { display: flex; align-items: flex-start; gap: 10px; }
-.h-orderno   { font-size: 14px; font-weight: 700; }
-.h-date      { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.h-amount    { font-size: 15px; font-weight: 700; }
-.h-pts       { font-size: 12px; font-weight: 600; }
-.green       { color: var(--green, #16a34a); }
-.h-chevron   { color: var(--muted); font-size: 11px; align-self: center; margin-left: 4px; }
-.h-detail    { margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f4ff; }
-.h-items     { display: flex; flex-direction: column; gap: 4px; }
-.h-item      { display: flex; justify-content: space-between; font-size: 13px; }
-.h-note      { font-size: 12px; color: var(--muted); margin-top: 6px; }
+/* Page shell */
+.cmd-page    { min-height: 100vh; background: #0f1117; color: #e8eaf0; padding: 24px; font-family: 'DM Mono', 'Fira Code', monospace; }
+.cmd-loading { padding: 80px; text-align: center; color: #666; }
+.cmd-error   { background: #2d1111; border: 1px solid #7f1d1d; color: #fca5a5; padding: 14px 18px; border-radius: 8px; }
+
+/* Header */
+.cmd-header  { display: flex; align-items: center; gap: 24px; margin-bottom: 24px; }
+.back-btn    { background: none; border: 1px solid #2a2d3a; color: #8891aa; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all .15s; }
+.back-btn:hover { border-color: #4f83cc; color: #a8c4f0; }
+.member-ident { display: flex; align-items: center; gap: 14px; flex: 1; }
+.member-avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #4f83cc, #2d5db5); color: #fff; font-size: 18px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(79,131,204,.3); }
+.member-name { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: .3px; }
+.member-sub  { font-size: 12px; color: #667; margin-top: 3px; }
+.tier-bronze { color: #cd7f32; }
+.tier-silver { color: #aaa; }
+.tier-gold   { color: #ffd700; }
+.edit-link   { margin-left: auto; font-size: 12px; color: #4f83cc; text-decoration: none; border: 1px solid #2a3a55; padding: 6px 12px; border-radius: 6px; transition: all .15s; }
+.edit-link:hover { background: #1a2a3d; }
+
+/* KPI strip */
+.kpi-strip   { display: flex; align-items: center; background: #161921; border: 1px solid #1e2130; border-radius: 12px; padding: 20px 28px; margin-bottom: 20px; gap: 0; }
+.kpi         { flex: 1; text-align: center; }
+.kpi-value   { font-size: 20px; font-weight: 700; color: #c8d6ea; letter-spacing: .5px; }
+.kpi-value.accent { color: #4fc3f7; }
+.kpi-label   { font-size: 10px; color: #445; text-transform: uppercase; letter-spacing: 1px; margin-top: 5px; }
+.kpi-divider { width: 1px; background: #1e2130; align-self: stretch; margin: 0 8px; }
+
+/* Main grid */
+.cmd-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media(max-width: 800px) { .cmd-grid { grid-template-columns: 1fr; } .kpi-strip { flex-wrap: wrap; gap: 16px; } }
+
+/* Panels */
+.panel       { border-radius: 12px; overflow: hidden; }
+.panel-dark  { background: #161921; border: 1px solid #1e2130; }
+.panel-light { background: #13161e; border: 1px solid #1e2130; }
+.panel-header { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid #1e2130; }
+.panel-icon  { font-size: 16px; }
+.panel-title { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #556; flex: 1; }
+.panel-count { font-size: 11px; color: #445; }
+.panel-empty { padding: 40px 20px; text-align: center; color: #334; font-size: 13px; line-height: 1.7; }
+
+/* Top 5 */
+.top5-list   { padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.top5-row    { display: flex; align-items: center; gap: 12px; padding: 12px 10px; border-radius: 8px; transition: background .1s; }
+.top5-row:hover { background: #1a1e28; }
+.medal       { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.medal-num   { font-size: 13px; font-weight: 700; color: #445; }
+.top5-info   { flex: 1; min-width: 0; }
+.top5-name   { font-size: 13px; font-weight: 600; color: #c8d6ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; }
+.top5-bar-wrap { height: 4px; background: #1e2130; border-radius: 2px; overflow: hidden; margin-bottom: 5px; }
+.top5-bar    { height: 100%; background: linear-gradient(90deg, #4f83cc, #4fc3f7); border-radius: 2px; transition: width .5s ease; }
+.top5-sub    { font-size: 10px; color: #445; letter-spacing: .3px; }
+.top5-stats  { text-align: right; flex-shrink: 0; }
+.top5-qty    { font-size: 18px; font-weight: 700; color: #4fc3f7; line-height: 1; }
+.top5-spend  { font-size: 11px; color: #445; margin-top: 2px; }
+
+/* Timeline */
+.timeline    { padding: 16px 16px 4px; display: flex; flex-direction: column; max-height: 600px; overflow-y: auto; }
+.tl-item     { display: flex; gap: 10px; }
+.tl-gutter   { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 16px; padding-top: 6px; }
+.tl-dot      { width: 10px; height: 10px; border-radius: 50%; background: #4f83cc; box-shadow: 0 0 0 3px rgba(79,131,204,.2); flex-shrink: 0; }
+.tl-line     { width: 2px; flex: 1; background: #1e2130; margin-top: 4px; }
+.tl-item:last-child .tl-line { display: none; }
+.tl-card     { flex: 1; background: #1a1e28; border: 1px solid #1e2130; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s; }
+.tl-card:hover, .tl-card.open { border-color: #2a3a55; }
+.tl-top      { display: flex; align-items: flex-start; gap: 8px; }
+.tl-left     { flex: 1; }
+.tl-orderno  { font-size: 13px; font-weight: 700; color: #c8d6ea; letter-spacing: .3px; }
+.tl-date     { font-size: 11px; color: #445; margin-top: 2px; }
+.tl-right    { text-align: right; }
+.tl-amount   { font-size: 14px; font-weight: 700; color: #e8eaf0; }
+.tl-pts      { font-size: 11px; color: #4fc3f7; font-weight: 600; margin-top: 1px; }
+.tl-chevron  { font-size: 10px; color: #334; align-self: center; }
+.tl-detail   { margin-top: 10px; padding-top: 10px; border-top: 1px solid #1e2130; }
+.tl-items    { display: flex; flex-direction: column; gap: 5px; }
+.tl-item-row { display: flex; gap: 8px; font-size: 12px; }
+.tl-item-q   { color: #4f83cc; font-weight: 700; min-width: 24px; }
+.tl-item-n   { flex: 1; color: #a8b4c8; }
+.tl-item-p   { color: #667; }
+.tl-no-items { font-size: 12px; color: #334; padding: 4px 0; }
+.tl-note     { font-size: 11px; color: #556; margin-top: 5px; }
+
+/* Scrollbar */
+.timeline::-webkit-scrollbar { width: 4px; }
+.timeline::-webkit-scrollbar-track { background: transparent; }
+.timeline::-webkit-scrollbar-thumb { background: #1e2130; border-radius: 2px; }
 </style>

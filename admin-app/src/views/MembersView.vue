@@ -1,11 +1,14 @@
 <template>
   <div class="page">
-    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
       <div>
         <h1 class="page-title">Members</h1>
         <p class="page-sub">{{ members.length }} registered members</p>
       </div>
-      <input v-model="search" type="text" placeholder="Search name or phone..." class="input" style="width:260px" />
+      <div style="display:flex;gap:10px;align-items:center">
+        <input v-model="search" type="text" placeholder="Search name or phone…" class="input" style="width:220px" />
+        <router-link to="/members/new/edit" class="btn btn-primary" style="white-space:nowrap">+ New Member</router-link>
+      </div>
     </div>
 
     <div class="card">
@@ -19,28 +22,37 @@
               <th>Phone</th>
               <th>Tier</th>
               <th>Points</th>
-              <th>Value</th>
+              <th>Status</th>
               <th>Joined</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="m in filtered" :key="m.id">
+            <tr v-for="m in filtered" :key="m.id" :class="{ inactive: !m.is_active }">
               <td>
                 <div class="member-row">
-                  <div class="avatar">{{ m.name.charAt(0).toUpperCase() }}</div>
+                  <div class="avatar" :class="{ dim: !m.is_active }">{{ m.name.charAt(0).toUpperCase() }}</div>
                   <span class="fw600">{{ m.name }}</span>
                 </div>
               </td>
               <td class="text-muted">{{ m.phone }}</td>
               <td><span :class="['badge', `badge-${m.tier}`]">{{ m.tier }}</span></td>
               <td><strong>{{ m.points }}</strong> pts</td>
-              <td class="text-muted">≈ RM {{ (m.points * 0.01).toFixed(2) }}</td>
+              <td>
+                <span :class="m.is_active ? 'pill-active' : 'pill-inactive'">
+                  {{ m.is_active ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
               <td class="text-muted">{{ formatDate(m.created_at) }}</td>
               <td>
-                <router-link :to="`/members/${m.id}`" class="btn btn-ghost" style="font-size:12px;padding:5px 10px">
-                  History
-                </router-link>
+                <div style="display:flex;gap:6px">
+                  <router-link :to="`/members/${m.id}`" class="btn btn-ghost" style="font-size:12px;padding:5px 10px">
+                    History
+                  </router-link>
+                  <router-link :to="`/members/${m.id}/edit`" class="btn btn-ghost" style="font-size:12px;padding:5px 10px">
+                    Edit
+                  </router-link>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -71,20 +83,20 @@ function formatDate(dt) {
 }
 
 onMounted(async () => {
-  try {
-    members.value = await api.get('/admin/members')
-  } catch (e) {
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
+  try { members.value = await api.get('/admin/members') }
+  catch (e) { console.error(e) }
+  finally { loading.value = false }
 })
 </script>
 
 <style scoped>
-.empty      { padding: 40px; text-align: center; color: var(--muted); }
-.member-row { display: flex; align-items: center; gap: 10px; }
-.avatar     { width: 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.fw600      { font-weight: 600; font-size: 13px; }
-.text-muted { color: var(--muted); font-size: 13px; }
+.empty       { padding: 40px; text-align: center; color: var(--muted); }
+.member-row  { display: flex; align-items: center; gap: 10px; }
+.avatar      { width: 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.avatar.dim  { background: #ccc; }
+.fw600       { font-weight: 600; font-size: 13px; }
+.text-muted  { color: var(--muted); font-size: 13px; }
+.inactive td { opacity: .55; }
+.pill-active   { background: #d1fae5; color: #065f46; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.pill-inactive { background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
 </style>
