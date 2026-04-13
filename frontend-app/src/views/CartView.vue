@@ -51,10 +51,11 @@
       <div class="card section-card">
         <p class="section-label">🎫 Voucher Code</p>
         <div v-if="!voucher.applied">
-          <div style="display:flex;gap:8px">
-            <input v-model="voucher.code" type="text" class="voucher-input" placeholder="Enter code"
-              style="text-transform:uppercase" :disabled="voucher.loading" @keyup.enter="applyVoucher" />
-            <button class="btn btn-primary" style="padding:10px 16px" :disabled="voucher.loading||!voucher.code.trim()" @click="applyVoucher">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input v-model="voucher.code" type="text" placeholder="Enter code"
+              style="flex:1;min-width:0;padding:10px 12px;border:1.5px solid #e0e5ef;border-radius:8px;font-size:14px;font-weight:700;letter-spacing:1px;outline:none;text-transform:uppercase;background:#fff;color:#1a1a2e;box-sizing:border-box"
+              :disabled="voucher.loading" @keyup.enter="applyVoucher" />
+            <button class="btn btn-primary" style="padding:10px 16px;flex-shrink:0" :disabled="voucher.loading||!voucher.code.trim()" @click="applyVoucher">
               {{ voucher.loading ? '…' : 'Apply' }}
             </button>
           </div>

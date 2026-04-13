@@ -194,7 +194,6 @@ function fmtDatetime(dt) {
 .c-phone  { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
 /* Status grid */
-.status-card  { }
 .status-grid  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .status-btn   { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border-radius: 10px; border: 2px solid #e0e8ff; background: #f7f9ff; cursor: pointer; transition: all .15s; position: relative; }
 .status-btn:hover { border-color: var(--blue); background: #eef3ff; }
