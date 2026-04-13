@@ -55,7 +55,7 @@
             <input v-model="voucher.code" type="text" placeholder="Enter code"
               style="flex:1;min-width:0;padding:10px 12px;border:1.5px solid #e0e5ef;border-radius:8px;font-size:14px;font-weight:700;letter-spacing:1px;outline:none;text-transform:uppercase;background:#fff;color:#1a1a2e;box-sizing:border-box;-webkit-user-select:text;user-select:text;touch-action:manipulation"
               :disabled="voucher.loading" @keyup.enter="applyVoucher" />
-            <button class="btn btn-primary" style="padding:10px 16px;flex-shrink:0" :disabled="voucher.loading||!voucher.code.trim()" @click="applyVoucher">
+            <button class="btn btn-primary" style="padding:10px 16px;flex-shrink:0;width:auto" :disabled="voucher.loading||!voucher.code.trim()" @click="applyVoucher">
               {{ voucher.loading ? '…' : 'Apply' }}
             </button>
           </div>
