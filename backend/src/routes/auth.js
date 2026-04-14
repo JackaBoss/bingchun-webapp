@@ -7,7 +7,13 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 
 function makeTokens(user) {
-  const payload = { id: user.id, phone: user.phone, tier: user.tier, role: user.role || 'member' };
+  const payload = {
+    id:        user.id,
+    phone:     user.phone,
+    tier:      user.tier,
+    role:      user.role || 'member',
+    outlet_id: user.outlet_id || null,  // null = owner (all outlets), number = staff (scoped)
+  };
 
   const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
@@ -36,8 +42,11 @@ router.post('/register', async (req, res) => {
       [phone, name, hash, email || null]
     );
     const userId = result.insertId;
-    const [rows]  = await db.query('SELECT id, phone, name, points, tier, role FROM users WHERE id = ?', [userId]);
-    const user    = rows[0];
+    const [rows]  = await db.query(
+      'SELECT id, phone, name, points, tier, role, outlet_id FROM users WHERE id = ?',
+      [userId]
+    );
+    const user = rows[0];
     const { accessToken, refreshToken } = makeTokens(user);
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     await db.query(
@@ -58,7 +67,7 @@ router.post('/login', async (req, res) => {
   }
   try {
     const [rows] = await db.query(
-      'SELECT id, phone, name, password_hash, points, tier, role, is_active FROM users WHERE phone = ?',
+      'SELECT id, phone, name, password_hash, points, tier, role, outlet_id, is_active FROM users WHERE phone = ?',
       [phone]
     );
     if (rows.length === 0) {
@@ -99,7 +108,7 @@ router.post('/refresh', async (req, res) => {
       return res.status(401).json({ error: 'Refresh token invalid or expired' });
     }
     const [userRows] = await db.query(
-      'SELECT id, phone, name, points, tier, role FROM users WHERE id = ?',
+      'SELECT id, phone, name, points, tier, role, outlet_id FROM users WHERE id = ?',
       [payload.id]
     );
     const user = userRows[0];
@@ -126,7 +135,7 @@ router.post('/logout', requireAuth, async (req, res) => {
 
 router.get('/me', requireAuth, async (req, res) => {
   const [rows] = await db.query(
-    'SELECT id, phone, email, name, points, tier, role, created_at FROM users WHERE id = ?',
+    'SELECT id, phone, email, name, points, tier, role, outlet_id, created_at FROM users WHERE id = ?',
     [req.user.id]
   );
   res.json(rows[0]);

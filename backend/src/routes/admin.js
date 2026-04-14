@@ -4,39 +4,101 @@ const bcrypt   = require('bcryptjs');
 const { requireAdmin } = require('../middleware/admin');
 const router   = express.Router();
 
-// ── GET /api/admin/dashboard ───────────────────────────────────────────────
+// ── Outlet scoping helper ─────────────────────────────────────────────────
+// If the admin user has outlet_id set, they are staff — scope all queries to
+// their outlet. If outlet_id is null, they are the owner — see everything.
+//
+// Usage:
+//   const scope = outletScope(req.user);
+//   sql += scope.where ? ' AND ' + scope.where : '';
+//   params.push(...scope.params);
+//
+function outletScope(user, tableAlias = 'o') {
+  if (user.outlet_id) {
+    return {
+      where:  `${tableAlias}.outlet_id = ?`,
+      params: [user.outlet_id],
+    };
+  }
+  return { where: null, params: [] };
+}
+
+// ── GET /api/admin/outlets ────────────────────────────────────────────────
+// Owner only — list all outlets (used for store filter dropdown)
+router.get('/outlets', requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT id, store_code, name, address, is_open FROM outlets ORDER BY store_code'
+    );
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── GET /api/admin/dashboard ───────────────────────────────────────────────────
 router.get('/dashboard', requireAdmin, async (req, res) => {
   try {
-    const [[todaySales]] = await db.query(
+    const scope = outletScope(req.user);
+
+    const [todaySales] = await db.query(
       `SELECT COUNT(*) as order_count, COALESCE(SUM(total),0) as revenue
-       FROM orders WHERE DATE(created_at) = CURDATE() AND status != 'cancelled'`
+       FROM orders o
+       WHERE DATE(created_at) = CURDATE() AND status != 'cancelled'
+       ${scope.where ? 'AND ' + scope.where : ''}`,
+      scope.params
     );
-    const [[totalUsers]]    = await db.query('SELECT COUNT(*) as count FROM users');
-    const [[pendingOrders]] = await db.query(
-      `SELECT COUNT(*) as count FROM orders WHERE status IN ('pending','paid','preparing')`
+
+    const [pendingOrders] = await db.query(
+      `SELECT COUNT(*) as count FROM orders o
+       WHERE status IN ('pending','paid','preparing')
+       ${scope.where ? 'AND ' + scope.where : ''}`,
+      scope.params
     );
+
+    // Total users is global (members aren't outlet-specific)
+    const [[totalUsers]] = await db.query('SELECT COUNT(*) as count FROM users WHERE role = "member"');
+
     const [recentOrders] = await db.query(
-      `SELECT o.*, ot.name as outlet_name, u.name as customer_name, u.phone as customer_phone
+      `SELECT o.*, ot.name as outlet_name, ot.store_code,
+              u.name as customer_name, u.phone as customer_phone
        FROM orders o
        JOIN outlets ot ON o.outlet_id = ot.id
        JOIN users u ON o.user_id = u.id
-       ORDER BY o.created_at DESC LIMIT 20`
+       WHERE 1=1 ${scope.where ? 'AND ' + scope.where : ''}
+       ORDER BY o.created_at DESC LIMIT 20`,
+      scope.params
     );
-    res.json({ today: todaySales, total_users: totalUsers.count, pending_orders: pendingOrders.count, recent_orders: recentOrders });
+
+    res.json({
+      today:          todaySales[0],
+      total_users:    totalUsers.count,
+      pending_orders: pendingOrders[0].count,
+      recent_orders:  recentOrders,
+    });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ── GET /api/admin/orders ──────────────────────────────────────────────────
 router.get('/orders', requireAdmin, async (req, res) => {
   const status = req.query.status || null;
+  // Owner can optionally filter by outlet_id via query param; staff always scoped
+  const filterOutletId = req.user.outlet_id || req.query.outlet_id || null;
   const limit  = Math.min(parseInt(req.query.limit) || 50, 100);
   const offset = parseInt(req.query.offset) || 0;
-  let sql = `SELECT o.*, ot.name as outlet_name, u.name as customer_name, u.phone as customer_phone
-             FROM orders o JOIN outlets ot ON o.outlet_id = ot.id JOIN users u ON o.user_id = u.id`;
+
+  let sql = `SELECT o.*, ot.name as outlet_name, ot.store_code,
+                    u.name as customer_name, u.phone as customer_phone
+             FROM orders o
+             JOIN outlets ot ON o.outlet_id = ot.id
+             JOIN users u ON o.user_id = u.id
+             WHERE 1=1`;
   const params = [];
-  if (status) { sql += ' WHERE o.status = ?'; params.push(status); }
+
+  if (status)         { sql += ' AND o.status = ?';     params.push(status); }
+  if (filterOutletId) { sql += ' AND o.outlet_id = ?';  params.push(filterOutletId); }
+
   sql += ' ORDER BY o.created_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
+
   const [rows] = await db.query(sql, params);
   res.json(rows);
 });
@@ -44,10 +106,13 @@ router.get('/orders', requireAdmin, async (req, res) => {
 // ── GET /api/admin/orders/:id ──────────────────────────────────────────────
 router.get('/orders/:id', requireAdmin, async (req, res) => {
   try {
+    const scope = outletScope(req.user);
     const [[order]] = await db.query(
-      `SELECT o.*, ot.name as outlet_name, u.name as customer_name, u.phone as customer_phone
+      `SELECT o.*, ot.name as outlet_name, ot.store_code,
+              u.name as customer_name, u.phone as customer_phone
        FROM orders o JOIN outlets ot ON o.outlet_id = ot.id JOIN users u ON o.user_id = u.id
-       WHERE o.id = ?`, [req.params.id]
+       WHERE o.id = ? ${scope.where ? 'AND ' + scope.where : ''}`,
+      [req.params.id, ...scope.params]
     );
     if (!order) return res.status(404).json({ error: 'Order not found' });
     const [items] = await db.query('SELECT * FROM order_items WHERE order_id = ?', [order.id]);
@@ -64,11 +129,15 @@ router.get('/orders/:id', requireAdmin, async (req, res) => {
 router.patch('/orders/:id/status', requireAdmin, async (req, res) => {
   const { status } = req.body;
   const valid = ['pending','paid','preparing','ready','completed','cancelled'];
-  if (!valid.includes(status)) return res.status(400).json({ error: `Invalid status` });
+  if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
-    const [[order]] = await conn.query('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    const scope = outletScope(req.user);
+    const [[order]] = await conn.query(
+      `SELECT * FROM orders o WHERE id = ? ${scope.where ? 'AND ' + scope.where : ''}`,
+      [req.params.id, ...scope.params]
+    );
     if (!order) { await conn.rollback(); return res.status(404).json({ error: 'Order not found' }); }
     await conn.query('UPDATE orders SET status = ? WHERE id = ?', [status, order.id]);
     if (status === 'paid' && order.points_earned > 0 && order.status === 'pending') {
@@ -88,6 +157,7 @@ router.patch('/orders/:id/status', requireAdmin, async (req, res) => {
 });
 
 // ── GET /api/admin/menu ────────────────────────────────────────────────────
+// Menu is shared across outlets — no scoping needed
 router.get('/menu', requireAdmin, async (req, res) => {
   const [categories] = await db.query('SELECT * FROM categories ORDER BY sort_order');
   const [items]      = await db.query('SELECT * FROM menu_items ORDER BY category_id, sort_order');
@@ -125,10 +195,12 @@ router.patch('/menu/:id/toggle', requireAdmin, async (req, res) => {
 // ── GET /api/admin/orders/:id/receipt ─────────────────────────────────────
 router.get('/orders/:id/receipt', requireAdmin, async (req, res) => {
   try {
+    const scope = outletScope(req.user);
     const [[order]] = await db.query(
       `SELECT o.*, ot.name as outlet_name, u.name as customer_name, u.phone as customer_phone
-       FROM orders o JOIN outlets ot ON o.outlet_id = ot.id JOIN users u ON o.user_id = u.id WHERE o.id = ?`,
-      [req.params.id]
+       FROM orders o JOIN outlets ot ON o.outlet_id = ot.id JOIN users u ON o.user_id = u.id
+       WHERE o.id = ? ${scope.where ? 'AND ' + scope.where : ''}`,
+      [req.params.id, ...scope.params]
     );
     if (!order) return res.status(404).json({ error: 'Order not found' });
     const [items] = await db.query('SELECT * FROM order_items WHERE order_id = ?', [order.id]);
@@ -158,7 +230,7 @@ router.get('/orders/:id/receipt', requireAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-// ── GET /api/admin/member-lookup?phone=XXX ────────────────────────────────
+// ── GET /api/admin/member-lookup ──────────────────────────────────────────
 router.get('/member-lookup', requireAdmin, async (req, res) => {
   const { phone } = req.query;
   if (!phone) return res.status(400).json({ error: 'Phone required' });
@@ -170,6 +242,7 @@ router.get('/member-lookup', requireAdmin, async (req, res) => {
 });
 
 // ── GET /api/admin/members ─────────────────────────────────────────────────
+// Members are global (not outlet-scoped) — a member can order from any outlet
 router.get('/members', requireAdmin, async (req, res) => {
   try {
     const [members] = await db.query(
@@ -193,7 +266,6 @@ router.get('/members/:id', requireAdmin, async (req, res) => {
 });
 
 // ── POST /api/admin/members ───────────────────────────────────────────────
-// Create a new member account
 router.post('/members', requireAdmin, async (req, res) => {
   const { name, phone, email, password, tier, points } = req.body;
   if (!name || !phone || !password) {
@@ -202,7 +274,6 @@ router.post('/members', requireAdmin, async (req, res) => {
   try {
     const [[existing]] = await db.query('SELECT id FROM users WHERE phone = ?', [phone]);
     if (existing) return res.status(409).json({ error: 'Phone number already registered' });
-
     const hash = await bcrypt.hash(password, 12);
     const [result] = await db.query(
       `INSERT INTO users (name, phone, email, password_hash, tier, points, role, is_active)
@@ -218,11 +289,9 @@ router.post('/members', requireAdmin, async (req, res) => {
 });
 
 // ── PATCH /api/admin/members/:id ─────────────────────────────────────────
-// Update member: name, phone, email, tier, points, is_active, password
 router.patch('/members/:id', requireAdmin, async (req, res) => {
   const { name, phone, email, tier, points, is_active, password } = req.body;
   const fields = []; const values = [];
-
   if (name      !== undefined) { fields.push('name = ?');      values.push(name.trim()); }
   if (phone     !== undefined) { fields.push('phone = ?');     values.push(phone.trim()); }
   if (email     !== undefined) { fields.push('email = ?');     values.push(email?.trim() || null); }
@@ -234,11 +303,8 @@ router.patch('/members/:id', requireAdmin, async (req, res) => {
     fields.push('password_hash = ?');
     values.push(hash);
   }
-
   if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
-
   try {
-    // Check phone uniqueness if changing phone
     if (phone) {
       const [[existing]] = await db.query('SELECT id FROM users WHERE phone = ? AND id != ?', [phone, req.params.id]);
       if (existing) return res.status(409).json({ error: 'Phone number already in use' });
@@ -276,16 +342,22 @@ router.post('/credit-points', requireAdmin, async (req, res) => {
     const newBalance   = member.points + pointsEarned;
     await conn.query('UPDATE users SET points = ? WHERE id = ?', [newBalance, member.id]);
     const [wsResult] = await conn.query(
-      `INSERT INTO walkin_sales (user_id, walkin_order_no, bill_amount, points_earned, staff_note, staff_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [member.id, walkin_order_no.trim(), amount, pointsEarned, note || null, req.user.id]
+      `INSERT INTO walkin_sales (user_id, walkin_order_no, bill_amount, points_earned, staff_note, staff_id, outlet_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [member.id, walkin_order_no.trim(), amount, pointsEarned, note || null, req.user.id, req.user.outlet_id || null]
     );
     await conn.query(
       `INSERT INTO points_transactions (user_id, type, amount, balance, note) VALUES (?, 'earn', ?, ?, ?)`,
       [member.id, pointsEarned, newBalance, `Walk-in ${walkin_order_no} — RM${amount.toFixed(2)}`]
     );
     await conn.commit();
-    res.json({ success: true, walkin_sale_id: wsResult.insertId, member: { name: member.name, phone: member.phone, tier: member.tier }, points_earned: pointsEarned, new_balance: newBalance });
+    res.json({
+      success: true,
+      walkin_sale_id: wsResult.insertId,
+      member: { name: member.name, phone: member.phone, tier: member.tier },
+      points_earned: pointsEarned,
+      new_balance: newBalance,
+    });
   } catch (err) { await conn.rollback(); console.error(err); res.status(500).json({ error: 'Server error' }); }
   finally { conn.release(); }
 });
@@ -293,7 +365,11 @@ router.post('/credit-points', requireAdmin, async (req, res) => {
 router.post('/walkin-sales/:id/items', requireAdmin, async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'items array required' });
-  const [[sale]] = await db.query('SELECT id FROM walkin_sales WHERE id = ?', [req.params.id]);
+  const scope = outletScope(req.user, 'ws');
+  const [[sale]] = await db.query(
+    `SELECT ws.id FROM walkin_sales ws WHERE ws.id = ? ${scope.where ? 'AND ' + scope.where : ''}`,
+    [req.params.id, ...scope.params]
+  );
   if (!sale) return res.status(404).json({ error: 'Walk-in sale not found' });
   try {
     await db.query('DELETE FROM walkin_sale_items WHERE walkin_sale_id = ?', [req.params.id]);
@@ -314,9 +390,15 @@ router.get('/members/:id/history', requireAdmin, async (req, res) => {
       'SELECT id, name, phone, points, tier FROM users WHERE id = ? AND role = "member"', [req.params.id]
     );
     if (!member) return res.status(404).json({ error: 'Member not found' });
+    const scope = outletScope(req.user, 'ws');
     const [sales] = await db.query(
-      `SELECT ws.*, u.name as staff_name FROM walkin_sales ws LEFT JOIN users u ON ws.staff_id = u.id
-       WHERE ws.user_id = ? ORDER BY ws.created_at DESC`, [req.params.id]
+      `SELECT ws.*, u.name as staff_name, ot.name as outlet_name
+       FROM walkin_sales ws
+       LEFT JOIN users u ON ws.staff_id = u.id
+       LEFT JOIN outlets ot ON ws.outlet_id = ot.id
+       WHERE ws.user_id = ? ${scope.where ? 'AND ' + scope.where : ''}
+       ORDER BY ws.created_at DESC`,
+      [req.params.id, ...scope.params]
     );
     for (const sale of sales) {
       const [items] = await db.query('SELECT * FROM walkin_sale_items WHERE walkin_sale_id = ?', [sale.id]);
@@ -332,6 +414,7 @@ router.get('/members/:id/item-ranking', requireAdmin, async (req, res) => {
       'SELECT id, name, phone FROM users WHERE id = ? AND role = "member"', [req.params.id]
     );
     if (!member) return res.status(404).json({ error: 'Member not found' });
+    const scope = outletScope(req.user, 'ws');
     const [ranking] = await db.query(
       `SELECT wsi.menu_item_id, wsi.item_name,
          SUM(wsi.quantity)                  AS total_qty,
@@ -340,15 +423,17 @@ router.get('/members/:id/item-ranking', requireAdmin, async (req, res) => {
          MAX(ws.created_at)                 AS last_ordered
        FROM walkin_sale_items wsi
        JOIN walkin_sales ws ON wsi.walkin_sale_id = ws.id
-       WHERE ws.user_id = ?
+       WHERE ws.user_id = ? ${scope.where ? 'AND ' + scope.where : ''}
        GROUP BY wsi.menu_item_id, wsi.item_name
        ORDER BY total_qty DESC, total_spend DESC
-       LIMIT 5`, [req.params.id]
+       LIMIT 5`,
+      [req.params.id, ...scope.params]
     );
     const [[stats]] = await db.query(
       `SELECT COUNT(*) AS total_visits, SUM(bill_amount) AS total_spend,
               AVG(bill_amount) AS avg_bill, MAX(created_at) AS last_visit, MIN(created_at) AS first_visit
-       FROM walkin_sales WHERE user_id = ?`, [req.params.id]
+       FROM walkin_sales ws WHERE user_id = ? ${scope.where ? 'AND ' + scope.where : ''}`,
+      [req.params.id, ...scope.params]
     );
     res.json({ member, stats, ranking });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
