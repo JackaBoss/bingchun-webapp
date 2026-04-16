@@ -362,6 +362,42 @@ router.post('/credit-points', requireAdmin, async (req, res) => {
   finally { conn.release(); }
 });
 
+router.get('/walkin-sales', requireAdmin, async (req, res) => {
+  const scope = outletScope(req.user, 'ws');
+  try {
+    const [rows] = await db.query(
+      `SELECT ws.id, ws.walkin_order_no, ws.bill_amount, ws.points_earned, ws.staff_note,
+              ws.created_at, ws.outlet_id,
+              u.name as member_name, u.phone as member_phone,
+              ot.name as outlet_name,
+              COUNT(wsi.id) as item_count
+       FROM walkin_sales ws
+       JOIN users u ON ws.user_id = u.id
+       LEFT JOIN outlets ot ON ws.outlet_id = ot.id
+       LEFT JOIN walkin_sale_items wsi ON wsi.walkin_sale_id = ws.id
+       ${scope.where ? 'WHERE ' + scope.where : ''}
+       GROUP BY ws.id
+       ORDER BY ws.created_at DESC
+       LIMIT 200`,
+      scope.params
+    );
+    // attach items for each sale
+    if (rows.length) {
+      const ids = rows.map(r => r.id);
+      const [items] = await db.query(
+        `SELECT * FROM walkin_sale_items WHERE walkin_sale_id IN (?)`, [ids]
+      );
+      const itemMap = {};
+      items.forEach(it => {
+        if (!itemMap[it.walkin_sale_id]) itemMap[it.walkin_sale_id] = [];
+        itemMap[it.walkin_sale_id].push(it);
+      });
+      rows.forEach(r => { r.items = itemMap[r.id] || []; });
+    }
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
 router.post('/walkin-sales/:id/items', requireAdmin, async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'items array required' });

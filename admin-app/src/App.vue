@@ -22,7 +22,8 @@
           <router-link to="/menu"     class="nav-item" active-class="active"             @click="navOpen = false"><span>🍹</span> Menu</router-link>
           <router-link to="/members"  class="nav-item" active-class="active"             @click="navOpen = false"><span>👥</span> Members</router-link>
           <router-link to="/vouchers" class="nav-item" active-class="active"             @click="navOpen = false"><span>🎫</span> Vouchers</router-link>
-          <router-link to="/counter"  class="nav-item" active-class="active"             @click="navOpen = false"><span>🧾</span> Walk-in Points</router-link>
+          <router-link to="/counter"      class="nav-item" active-class="active"             @click="navOpen = false"><span>🧾</span> Walk-in Points</router-link>
+          <router-link to="/walkin-sales" class="nav-item" active-class="active"             @click="navOpen = false"><span>📝</span> Walk-in Sales</router-link>
         </nav>
 
         <div class="sidebar-footer">
