@@ -117,10 +117,14 @@ import { useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
+//Insert Store Selector Here
+import { useOutletStore } from '@/stores/outlet'
 
 const router = useRouter()
 const cart   = useCartStore()
 const auth   = useAuthStore()
+//Insert Store Selector Here
+const outlet = useOutletStore()
 
 const REDEEM_RATE  = 0.01
 const POINTS_PER_RM = 1

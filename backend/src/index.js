@@ -1,12 +1,13 @@
 require('dotenv').config();
-const express      = require('express');
-const cors         = require('cors');
-const authRoutes   = require('./routes/auth');
-const menuRoutes   = require('./routes/menu');
-const orderRoutes  = require('./routes/orders');
-const pointRoutes  = require('./routes/points');
-const adminRoutes  = require('./routes/admin');
+const express       = require('express');
+const cors          = require('cors');
+const authRoutes    = require('./routes/auth');
+const menuRoutes    = require('./routes/menu');
+const orderRoutes   = require('./routes/orders');
+const pointRoutes   = require('./routes/points');
+const adminRoutes   = require('./routes/admin');
 const voucherRoutes = require('./routes/vouchers');
+const outletRoutes  = require('./routes/outlets');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -27,12 +28,13 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 
-app.use('/api/auth',     authRoutes);
-app.use('/api/menu',     menuRoutes);
-app.use('/api/orders',   orderRoutes);
-app.use('/api/points',   pointRoutes);
-app.use('/api/admin',    adminRoutes);
-app.use('/api',          voucherRoutes);   // mounts /api/vouchers/* and /api/admin/vouchers/*
+app.use('/api/auth',    authRoutes);
+app.use('/api/menu',    menuRoutes);
+app.use('/api/orders',  orderRoutes);
+app.use('/api/points',  pointRoutes);
+app.use('/api/admin',   adminRoutes);
+app.use('/api/outlets', outletRoutes);
+app.use('/api',         voucherRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 
