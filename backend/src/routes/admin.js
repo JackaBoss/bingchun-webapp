@@ -476,3 +476,150 @@ router.get('/members/:id/item-ranking', requireAdmin, async (req, res) => {
 });
 
 module.exports = router;
+// ══════════════════════════════════════════════════════════════════════════
+//  PRINT AGENT ENDPOINTS
+// ══════════════════════════════════════════════════════════════════════════
+
+// GET /api/admin/print-queue?outlet_id=1
+// Returns paid+unprinted orders for this outlet. Agent polls this every 5s.
+router.get('/print-queue', requireAdmin, async (req, res) => {
+  const scope = outletScope(req.user, 'o');
+  try {
+    const [orders] = await db.query(
+      `SELECT o.id, o.order_no, o.total, o.notes, o.created_at,
+              u.name as customer_name, u.phone as customer_phone,
+              ot.name as outlet_name
+       FROM orders o
+       JOIN users u  ON o.user_id   = u.id
+       JOIN outlets ot ON o.outlet_id = ot.id
+       WHERE o.status = 'paid'
+         AND o.printed_at IS NULL
+         ${scope.where ? 'AND ' + scope.where : ''}
+       ORDER BY o.created_at ASC`,
+      scope.params
+    );
+
+    for (const order of orders) {
+      const [items] = await db.query(
+        `SELECT oi.item_name, oi.quantity, oi.unit_price, oi.notes,
+                GROUP_CONCAT(oio.label ORDER BY oio.id SEPARATOR ', ') as options
+         FROM order_items oi
+         LEFT JOIN order_item_options oio ON oio.order_item_id = oi.id
+         WHERE oi.order_id = ?
+         GROUP BY oi.id`,
+        [order.id]
+      );
+      order.items = items;
+    }
+
+    res.json(orders);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// POST /api/admin/print-queue/:id/printed
+// Agent calls this after successfully printing
+router.post('/print-queue/:id/printed', requireAdmin, async (req, res) => {
+  try {
+    await db.query('UPDATE orders SET printed_at = NOW() WHERE id = ?', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+//  SALES REPORT
+// ══════════════════════════════════════════════════════════════════════════
+
+// GET /api/admin/reports/sales?from=2026-01-01&to=2026-01-31&outlet_id=1&format=json|csv
+router.get('/reports/sales', requireAdmin, async (req, res) => {
+  const { from, to, format = 'json' } = req.query;
+  if (!from || !to) return res.status(400).json({ error: 'from and to dates required (YYYY-MM-DD)' });
+
+  const scope = outletScope(req.user, 'o');
+  try {
+    // Summary stats
+    const [summary] = await db.query(
+      `SELECT
+         COUNT(*)                                    AS order_count,
+         SUM(o.subtotal)                             AS gross_sales,
+         SUM(o.discount)                             AS total_discounts,
+         SUM(o.total)                                AS net_sales,
+         SUM(o.points_earned)                        AS points_issued,
+         SUM(o.points_redeemed)                      AS points_redeemed,
+         COUNT(DISTINCT o.user_id)                   AS unique_customers
+       FROM orders o
+       WHERE DATE(o.created_at) BETWEEN ? AND ?
+         AND o.status NOT IN ('cancelled')
+         ${scope.where ? 'AND ' + scope.where : ''}`,
+      [from, to, ...scope.params]
+    );
+
+    // Daily breakdown
+    const [daily] = await db.query(
+      `SELECT
+         DATE(o.created_at)   AS date,
+         ot.name              AS outlet,
+         COUNT(*)             AS orders,
+         SUM(o.total)         AS revenue
+       FROM orders o
+       JOIN outlets ot ON o.outlet_id = ot.id
+       WHERE DATE(o.created_at) BETWEEN ? AND ?
+         AND o.status NOT IN ('cancelled')
+         ${scope.where ? 'AND ' + scope.where : ''}
+       GROUP BY DATE(o.created_at), o.outlet_id
+       ORDER BY date ASC`,
+      [from, to, ...scope.params]
+    );
+
+    // Top items
+    const [topItems] = await db.query(
+      `SELECT
+         oi.item_name,
+         SUM(oi.quantity)                AS qty_sold,
+         SUM(oi.quantity * oi.unit_price) AS revenue
+       FROM order_items oi
+       JOIN orders o ON oi.order_id = o.id
+       WHERE DATE(o.created_at) BETWEEN ? AND ?
+         AND o.status NOT IN ('cancelled')
+         ${scope.where ? 'AND ' + scope.where : ''}
+       GROUP BY oi.item_name
+       ORDER BY qty_sold DESC
+       LIMIT 20`,
+      [from, to, ...scope.params]
+    );
+
+    // Orders detail
+    const [orders] = await db.query(
+      `SELECT
+         o.order_no, DATE(o.created_at) AS date,
+         TIME(o.created_at) AS time,
+         ot.name AS outlet,
+         u.name  AS customer, u.phone AS customer_phone,
+         o.subtotal, o.discount, o.total,
+         o.points_earned, o.points_redeemed, o.status
+       FROM orders o
+       JOIN users   u  ON o.user_id    = u.id
+       JOIN outlets ot ON o.outlet_id  = ot.id
+       WHERE DATE(o.created_at) BETWEEN ? AND ?
+         AND o.status NOT IN ('cancelled')
+         ${scope.where ? 'AND ' + scope.where : ''}
+       ORDER BY o.created_at DESC`,
+      [from, to, ...scope.params]
+    );
+
+    if (format === 'csv') {
+      const rows = [
+        ['Order No','Date','Time','Outlet','Customer','Phone','Subtotal','Discount','Total','Points Earned','Points Redeemed','Status'],
+        ...orders.map(o => [
+          o.order_no, o.date, o.time, o.outlet, o.customer, o.customer_phone,
+          o.subtotal, o.discount, o.total, o.points_earned, o.points_redeemed, o.status,
+        ]),
+      ];
+      const csv = rows.map(r => r.map(v => `"${v ?? ''}"`).join(',')).join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="sales_${from}_${to}.csv"`);
+      return res.send(csv);
+    }
+
+    res.json({ summary: summary[0], daily, topItems, orders });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});

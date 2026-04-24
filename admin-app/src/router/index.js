@@ -13,6 +13,7 @@ const routes = [
   { path: '/vouchers',         name: 'Vouchers',      component: () => import('@/views/VouchersView.vue'),      meta: { requiresAuth: true } },
   { path: '/counter',          name: 'Counter',       component: () => import('@/views/CounterView.vue'),       meta: { requiresAuth: true } },
   { path: '/walkin-sales',     name: 'WalkinSales',   component: () => import('@/views/WalkinSalesView.vue'),   meta: { requiresAuth: true } },
+  { path: '/reports',          name: 'SalesReport',   component: () => import('@/views/SalesReportView.vue'),  meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })

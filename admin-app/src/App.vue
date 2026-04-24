@@ -10,7 +10,7 @@
         <div class="sidebar-brand">
           <span class="brand-icon">🧋</span>
           <div>
-            <div class="brand-name">冰纯茶饮</div>
+            <div class="brand-name">Bing Chun Malaysia</div>
             <div class="brand-sub">Admin Panel</div>
           </div>
           <button class="nav-close" @click="navOpen = false">✕</button>
@@ -24,6 +24,7 @@
           <router-link to="/vouchers" class="nav-item" active-class="active"             @click="navOpen = false"><span>🎫</span> Vouchers</router-link>
           <router-link to="/counter"      class="nav-item" active-class="active"             @click="navOpen = false"><span>🧾</span> Walk-in Points</router-link>
           <router-link to="/walkin-sales" class="nav-item" active-class="active"             @click="navOpen = false"><span>📝</span> Walk-in Sales</router-link>
+          <router-link to="/reports"     class="nav-item" active-class="active"             @click="navOpen = false"><span>📈</span> Sales Report</router-link>
         </nav>
 
         <div class="sidebar-footer">
