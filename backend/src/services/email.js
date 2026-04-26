@@ -3,7 +3,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM   = process.env.EMAIL_FROM || 'Bing Chun <noreply@bingchun.my>';
 
 async function sendOTP(toEmail, otp) {
-  await resend.emails.send({
+  const { data, error } = await resend.emails.send({
     from:    FROM,
     to:      toEmail,
     subject: `${otp} — Your Bing Chun verification code`,
@@ -20,6 +20,13 @@ async function sendOTP(toEmail, otp) {
       </div>
     `,
   });
+
+  if (error) {
+    console.error('Resend send failed:', error);
+    throw new Error(`Email send failed: ${error.message || error.name}`);
+  }
+  console.log('Resend sent OK, id:', data?.id);
+  return data;
 }
 
 module.exports = { sendOTP };
