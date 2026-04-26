@@ -1,6 +1,6 @@
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = process.env.EMAIL_FROM || 'Bing Chun <noreply@bingchun.my>';
+const FROM   = process.env.EMAIL_FROM || 'Bing Chun <noreply@bingchunmalaysia.com>';
 
 async function sendOTP(toEmail, otp) {
   const { data, error } = await resend.emails.send({
