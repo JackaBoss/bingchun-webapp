@@ -63,9 +63,20 @@
       </div>
 
       <div class="bottom-actions">
-        <button class="btn btn-primary" @click="router.push('/')">Order again</button>
+        <button class="btn btn-primary" @click="reorder" :disabled="reordering">
+          {{ reordering ? 'Adding to cart…' : '🔁 Reorder' }}
+        </button>
       </div>
     </template>
+
+    <!-- Not found -->
+    <div v-else class="empty-state">
+      <p class="empty-icon">📋</p>
+      <p class="empty-title">Order not found</p>
+      <button class="btn btn-primary" style="margin-top:24px" @click="router.push('/orders')">
+        Back to orders
+      </button>
+    </div>
   </div>
 </template>
 
@@ -74,18 +85,20 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
+import { useCartStore } from '@/stores/cart'
 
 const router = useRouter()
-const route  = useRoute()
-const toast  = useToast()
+const route = useRoute()
+const toast = useToast()
+const cart = useCartStore()
 
-const order   = ref(null)
+const order = ref(null)
 const loading = ref(true)
+const reordering = ref(false)
 
 // Statuses where order is still active — keep polling
 const ACTIVE_STATUSES = ['pending', 'paid', 'preparing']
-const POLL_INTERVAL   = 60_000 // 1 minute
-
+const POLL_INTERVAL = 60_000
 let pollTimer = null
 
 const isPolling = computed(() =>
@@ -93,23 +106,23 @@ const isPolling = computed(() =>
 )
 
 const statusMap = {
-  pending:   { label: 'Waiting for payment',  icon: '⏳' },
-  paid:      { label: 'Payment confirmed',     icon: '✅' },
+  pending:   { label: 'Waiting for payment', icon: '⏳' },
+  paid:      { label: 'Payment confirmed', icon: '✅' },
   preparing: { label: 'Preparing your order', icon: '👨‍🍳' },
-  ready:     { label: 'Ready for pickup!',    icon: '🎉' },
-  completed: { label: 'Completed',            icon: '✓'  },
-  cancelled: { label: 'Cancelled',            icon: '✕'  },
+  ready:     { label: 'Ready for pickup!', icon: '🎉' },
+  completed: { label: 'Completed', icon: '✓' },
+  cancelled: { label: 'Cancelled', icon: '✕' },
 }
 
 const statusLabel = computed(() => statusMap[order.value?.status]?.label || order.value?.status)
 const statusIcon  = computed(() => statusMap[order.value?.status]?.icon  || '📋')
 
 const statusToast = {
-  paid:      { message: '✅ Payment confirmed!',     type: 'success' },
+  paid:      { message: '✅ Payment confirmed!', type: 'success' },
   preparing: { message: '👨‍🍳 Your order is being prepared', type: 'info' },
   ready:     { message: '🎉 Your order is ready for pickup!', type: 'success' },
   completed: { message: 'Order completed. Thank you!', type: 'success' },
-  cancelled: { message: 'Order was cancelled.',        type: 'error'   },
+  cancelled: { message: 'Order was cancelled.', type: 'error' },
 }
 
 function formatDate(dt) {
@@ -127,11 +140,7 @@ async function fetchOrder(showToastOnChange = false) {
       if (t) toast.show(t)
     }
     order.value = fresh
-
-    // Stop polling once order is in a terminal state
-    if (!ACTIVE_STATUSES.includes(fresh.status)) {
-      stopPolling()
-    }
+    if (!ACTIVE_STATUSES.includes(fresh.status)) stopPolling()
   } catch (e) {
     console.error(e)
   }
@@ -146,6 +155,33 @@ function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 }
 
+async function reorder() {
+  if (!order.value?.items?.length) return
+  reordering.value = true
+
+  cart.clear()
+  cart.setOutlet(order.value.outlet_id)
+
+  for (const item of order.value.items) {
+    cart.addItem({
+      menu_item_id: item.menu_item_id,
+      name: item.item_name,
+      unit_price: item.unit_price,
+      option_ids: item.options?.map(o => o.option_id) || [],
+      options_label: item.options?.map(o => o.label).join(', ') || '',
+      notes: item.notes || '',
+    })
+    // If qty > 1, set it directly (item was just added at idx length-1)
+    if (item.quantity > 1) {
+      cart.updateQty(cart.items.length - 1, item.quantity)
+    }
+  }
+
+  toast.show({ message: `${order.value.items.length} item(s) added to cart`, type: 'success' })
+  reordering.value = false
+  router.push('/cart')
+}
+
 onMounted(async () => {
   await fetchOrder(false)
   loading.value = false
@@ -156,20 +192,28 @@ onUnmounted(() => stopPolling())
 </script>
 
 <style scoped>
-.order-detail-page { background: var(--bg); min-height: 100vh; padding-bottom: 80px; }
+.order-detail-page {
+  background: var(--bg);
+  min-height: 100vh;
+  padding-bottom: 80px;
+}
 
 .page-header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 16px; background: var(--white);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--white);
   border-bottom: 1px solid var(--border);
 }
+
 .back-btn { background: none; border: none; font-size: 20px; cursor: pointer; }
 .page-header h2 { font-size: 18px; font-weight: 700; flex: 1; }
 
-/* Live indicator dot in header */
 .poll-indicator { display: flex; align-items: center; }
 .poll-dot {
-  width: 8px; height: 8px; border-radius: 50%;
+  width: 8px; height: 8px;
+  border-radius: 50%;
   background: var(--border);
   transition: background 0.3s;
 }
@@ -186,10 +230,13 @@ onUnmounted(() => stopPolling())
 .loading-state { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .skeleton { height: 60px; border-radius: var(--radius); background: #f0f0f0; }
 
-/* Status banner */
 .status-banner {
-  margin: 12px 16px; padding: 16px;
-  border-radius: var(--radius); display: flex; align-items: center; gap: 14px;
+  margin: 12px 16px;
+  padding: 16px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 .status-banner.status-pending   { background: #fff8e1; }
 .status-banner.status-paid      { background: #e8f5e9; }
@@ -198,15 +245,18 @@ onUnmounted(() => stopPolling())
 .status-banner.status-completed { background: var(--bg); }
 .status-banner.status-cancelled { background: #ffebee; }
 
-.status-icon  { font-size: 32px; flex-shrink: 0; }
-.status-text  { flex: 1; }
+.status-icon { font-size: 32px; flex-shrink: 0; }
+.status-text { flex: 1; }
 .status-label { font-size: 16px; font-weight: 700; }
-.order-no     { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.order-no { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
 
 .live-badge {
-  font-size: 10px; font-weight: 800;
-  background: #27AE60; color: #fff;
-  padding: 3px 8px; border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  background: #27AE60;
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: 6px;
   letter-spacing: 0.5px;
   animation: pulse-badge 2s infinite;
 }
@@ -216,20 +266,55 @@ onUnmounted(() => stopPolling())
 }
 
 .section-card { margin: 12px 16px; }
-.section-label { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+.section-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
 
-.order-item-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.order-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
 .order-item-row:last-child { border-bottom: none; }
-.order-item-info  { flex: 1; }
-.order-item-name  { font-size: 14px; font-weight: 600; }
-.order-item-opts  { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.order-item-info { flex: 1; }
+.order-item-name { font-size: 14px; font-weight: 600; }
+.order-item-opts { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .order-item-notes { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .order-item-price { font-size: 14px; font-weight: 700; }
 
-.summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
-.summary-row.total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; font-size: 16px; font-weight: 700; }
-.info-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 14px;
+}
+.summary-row.total {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 10px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 14px;
+}
 .info-row span:first-child { color: var(--text-muted); }
 
 .bottom-actions { padding: 0 16px; margin-top: 8px; }
+.bottom-actions .btn { width: 100%; padding: 14px; }
+
+.empty-state { text-align: center; padding: 60px 24px; }
+.empty-icon { font-size: 56px; margin-bottom: 16px; }
+.empty-title { font-size: 18px; font-weight: 700; }
 </style>
