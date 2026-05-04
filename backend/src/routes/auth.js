@@ -31,7 +31,7 @@ function generateOTP() {
 
 async function issueOTP(email, purpose = 'registration') {
   const code = generateOTP();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
   // Invalidate prior unused codes for this email+purpose
   await db.query(
     'UPDATE otp_codes SET used = TRUE WHERE email = ? AND purpose = ? AND used = FALSE',

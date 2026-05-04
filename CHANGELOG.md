@@ -4,6 +4,28 @@ All notable changes to Bing Chun 冰纯 Web App.
 
 ---
 
+## [0.0.3] - 2026-04-28
+
+### Added
+- Email 2FA (OTP) on registration — 6-digit code, 15-min expiry, 5-attempt cap
+- `otp_codes` table with indexes on email/purpose and expiry
+- `email_verified` and `email_verified_at` columns on `users` table
+- Resend email service integration (`backend/src/services/email.js`)
+- Three new auth endpoints: `POST /api/auth/verify-otp`, `POST /api/auth/resend-otp`; `register` now returns `{ requiresOtp: true }`
+- Login blocks unverified accounts with `403 { requiresOtp: true }` and auto-triggers OTP resend on frontend
+
+### Changed
+- OTP expiry set to 15 minutes
+- Node version pinned to `22.x` via `engines` in `backend/package.json` and `frontend-app/package.json`
+- Custom domain live (`bingchun.my`) — Vercel and Railway pointing to domain; Resend already verified on Cloudflare DNS
+
+### Fixed
+- Backend `auth.js` restored after being accidentally overwritten with Pinia store code during 2FA commit (`1ea21ce`), causing 502 on all auth routes
+- Resend domain verification resolved by regenerating API key in correct workspace
+- Frontend OTP payload corrected (`email`+`code` instead of `phone`+`otp`)
+
+---
+
 ## [0.0.2] - 2026-04-16
 
 ### Added
