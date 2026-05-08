@@ -2,8 +2,7 @@
   <div class="auth-page">
     <div class="auth-logo">
       <img src="/logo.png" alt="Bing Chun" class="logo-img" />
-      <h1>冰纯茶饮</h1>
-      <p>Bing Chun Cha Yin</p>
+      <h1>Bing Chun Malaysia</h1>
     </div>
 
     <!-- Toggle tabs — hidden during OTP step -->
@@ -117,6 +116,7 @@ function startCooldown() {
     if (resendCooldown.value <= 0) clearInterval(cooldownTimer)
   }, 1000)
 }
+
 onUnmounted(() => clearInterval(cooldownTimer))
 
 async function doLogin() {
@@ -126,14 +126,12 @@ async function doLogin() {
     await auth.login(phone.value, password.value)
     router.push('/')
   } catch (err) {
-    // Backend returns requiresOtp:true when account exists but email unverified
     if (err?.requiresOtp && err?.email) {
       emailHint.value = err.email
       email.value = err.email
       otp.value = ''
       mode.value = 'otp'
       startCooldown()
-      // Trigger fresh OTP send
       try { await api.post('/auth/resend-otp', { email: err.email }) } catch (_) {}
     } else {
       error.value = err?.error || 'Login failed. Please try again.'
@@ -169,10 +167,7 @@ async function doVerify() {
   error.value = ''
   loading.value = true
   try {
-    const data = await api.post('/auth/verify-otp', {
-      email: email.value,
-      code: otp.value,
-    })
+    const data = await api.post('/auth/verify-otp', { email: email.value, code: otp.value })
     auth._saveSession(data)
     router.push('/')
   } catch (err) {
@@ -202,6 +197,7 @@ async function doResend() {
   flex-direction: column;
   background: var(--white);
 }
+
 .auth-logo { text-align: center; margin-bottom: 32px; }
 .logo-img { width: 80px; height: 80px; object-fit: contain; margin-bottom: 8px; }
 .auth-logo h1 { font-size: 22px; font-weight: 700; color: var(--blue); }
@@ -215,15 +211,9 @@ async function doResend() {
   margin-bottom: 28px;
 }
 .tab {
-  flex: 1;
-  padding: 10px;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-muted);
-  cursor: pointer;
+  flex: 1; padding: 10px; border: none; background: transparent;
+  border-radius: 6px; font-size: 14px; font-weight: 600;
+  color: var(--text-muted); cursor: pointer;
 }
 .tab.active { background: var(--white); color: var(--blue); box-shadow: var(--shadow); }
 
@@ -231,12 +221,10 @@ async function doResend() {
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .field-hint { font-size: 12px; color: var(--text-muted); }
+
 .error-msg {
-  color: #e53e3e;
-  font-size: 13px;
-  padding: 8px 12px;
-  background: #fff5f5;
-  border-radius: var(--radius-sm);
+  color: #e53e3e; font-size: 13px; padding: 8px 12px;
+  background: #fff5f5; border-radius: var(--radius-sm);
   border-left: 3px solid #e53e3e;
 }
 
@@ -244,29 +232,15 @@ async function doResend() {
 .otp-icon { font-size: 48px; margin-bottom: 8px; }
 .otp-header h2 { font-size: 20px; font-weight: 700; }
 .otp-header p { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
-.otp-input {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 10px;
-  text-align: center;
-  padding: 14px;
-}
+.otp-input { font-size: 28px; font-weight: 800; letter-spacing: 10px; text-align: center; padding: 14px; }
+
 .resend-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; font-size: 13px; color: var(--text-muted);
 }
 .btn-link {
-  background: none;
-  border: none;
-  color: var(--blue);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
+  background: none; border: none; color: var(--blue);
+  font-size: 13px; font-weight: 600; cursor: pointer; padding: 0;
 }
 .btn-link:disabled { color: var(--text-muted); cursor: default; }
 .back-link { text-align: center; color: var(--text-muted); font-weight: 400; }

@@ -1,12 +1,11 @@
 <template>
   <div class="menu-page">
-
     <!-- Header -->
     <div class="menu-header">
       <div class="header-top">
         <div>
           <p class="greeting">Good {{ timeOfDay }}, {{ auth.user?.name?.split(' ')[0] }} 👋</p>
-          <h2 class="shop-name">冰纯茶饮</h2>
+          <h2 class="shop-name">{{ outletTitle }}</h2>
         </div>
         <div class="points-chip" @click="router.push('/profile')">
           ⭐ {{ auth.points }} pts
@@ -16,17 +15,10 @@
         <option value="1">Amerin Mall, Seri Kembangan</option>
         <option value="2">Mantin</option>
       </select>
-
       <!-- Search bar -->
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search drinks..."
-          class="search-input"
-          @input="onSearch"
-        />
+        <input v-model="searchQuery" type="text" placeholder="Search drinks..." class="search-input" @input="onSearch" />
         <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">✕</button>
       </div>
     </div>
@@ -34,7 +26,8 @@
     <!-- Category tabs (hidden during search) -->
     <div v-if="!searchQuery" class="category-tabs">
       <button
-        v-for="cat in menu" :key="cat.id"
+        v-for="cat in menu"
+        :key="cat.id"
         :class="['cat-tab', { active: activeCat === cat.id }]"
         @click="scrollToCategory(cat.id)"
       >{{ cat.name }}</button>
@@ -55,9 +48,18 @@
       <div v-else>
         <p class="search-count">{{ searchResults.length }} item{{ searchResults.length !== 1 ? 's' : '' }} found</p>
         <div class="items-grid">
-          <div v-for="item in searchResults" :key="item.id" class="item-card" @click="openModal(item)">
+          <div
+            v-for="item in searchResults"
+            :key="item.id"
+            class="item-card"
+            @click="openModal(item)"
+          >
             <div class="item-img-wrap">
-              <img :src="item.image_url || 'https://via.placeholder.com/120x120/e3f2fd/1e88e5?text=🧋'" :alt="item.name" class="item-img" />
+              <img
+                :src="item.image_url || 'https://via.placeholder.com/120x120/e3f2fd/1e88e5?text=🧋'"
+                :alt="item.name"
+                class="item-img"
+              />
             </div>
             <div class="item-info">
               <p class="item-name">{{ item.name }}</p>
@@ -74,12 +76,26 @@
 
     <!-- Normal menu sections -->
     <div v-else class="menu-sections">
-      <div v-for="cat in menu" :key="cat.id" :ref="el => sectionRefs[cat.id] = el" class="menu-section">
+      <div
+        v-for="cat in menu"
+        :key="cat.id"
+        :ref="el => sectionRefs[cat.id] = el"
+        class="menu-section"
+      >
         <h3 class="section-title">{{ cat.name }}</h3>
         <div class="items-grid">
-          <div v-for="item in cat.items" :key="item.id" class="item-card" @click="openModal(item)">
+          <div
+            v-for="item in cat.items"
+            :key="item.id"
+            class="item-card"
+            @click="openModal(item)"
+          >
             <div class="item-img-wrap">
-              <img :src="item.image_url || 'https://via.placeholder.com/120x120/e3f2fd/1e88e5?text=🧋'" :alt="item.name" class="item-img" />
+              <img
+                :src="item.image_url || 'https://via.placeholder.com/120x120/e3f2fd/1e88e5?text=🧋'"
+                :alt="item.name"
+                class="item-img"
+              />
             </div>
             <div class="item-info">
               <p class="item-name">{{ item.name }}</p>
@@ -145,7 +161,12 @@
                 <span class="option-group-name">Special request</span>
                 <span class="optional-tag">Optional</span>
               </div>
-              <textarea v-model="itemNotes" placeholder="e.g. less sweet, no ice…" class="notes-input" rows="2"></textarea>
+              <textarea
+                v-model="itemNotes"
+                placeholder="e.g. less sweet, no ice…"
+                class="notes-input"
+                rows="2"
+              ></textarea>
             </div>
 
             <div class="modal-actions">
@@ -162,7 +183,6 @@
         </div>
       </div>
     </Teleport>
-
   </div>
 </template>
 
@@ -176,21 +196,32 @@ import BottomNav from '@/components/BottomNav.vue'
 import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
-const auth   = useAuthStore()
-const cart   = useCartStore()
-const toast  = useToast()
+const auth = useAuthStore()
+const cart = useCartStore()
+const toast = useToast()
 
-const menu           = ref([])
-const loading        = ref(true)
-const activeCat      = ref(null)
+// "Bing Chun Amerin Mall" / "Bing Chun Mantin" / "Bing Chun Malaysia"
+const OUTLET_LABELS = {
+  1: 'Amerin Mall',
+  2: 'Mantin',
+}
+
+const outletTitle = computed(() => {
+  const label = OUTLET_LABELS[selectedOutlet.value]
+  return label ? `Bing Chun ${label}` : 'Bing Chun Malaysia'
+})
+
+const menu = ref([])
+const loading = ref(true)
+const activeCat = ref(null)
 const selectedOutlet = ref(1)
-const sectionRefs    = reactive({})
-const modalItem      = ref(null)
-const selections     = reactive({})
+const sectionRefs = reactive({})
+const modalItem = ref(null)
+const selections = reactive({})
 const multiSelections = reactive({})
-const qty            = ref(1)
-const itemNotes      = ref('')
-const searchQuery    = ref('')
+const qty = ref(1)
+const itemNotes = ref('')
+const searchQuery = ref('')
 
 const timeOfDay = computed(() => {
   const h = new Date().getHours()
@@ -285,15 +316,16 @@ function addToCart() {
   cart.setOutlet(selectedOutlet.value)
   for (let i = 0; i < qty.value; i++) {
     cart.addItem({
-      menu_item_id:  item.id,
-      name:          item.name,
-      unit_price:    unitPrice,
-      option_ids:    optionIds,
+      menu_item_id: item.id,
+      name: item.name,
+      unit_price: unitPrice,
+      option_ids: optionIds,
       options_label: optionLabels.join(', '),
-      notes:         itemNotes.value || null,
-      quantity:      1,
+      notes: itemNotes.value || null,
+      quantity: 1,
     })
   }
+
   toast.show({ message: `${item.name} added to cart` })
   closeModal()
 }
@@ -319,56 +351,28 @@ function addToCart() {
 .outlet-select {
   width: 100%; padding: 8px 12px;
   border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-  font-size: 14px; background: var(--bg); color: var(--text);
-  margin-bottom: 10px;
+  font-size: 14px; background: var(--bg); color: var(--text); margin-bottom: 10px;
 }
 
-/* Search */
 .search-wrap {
-  display: flex;
-  align-items: center;
-  background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
-  padding: 0 12px;
-  gap: 8px;
-  transition: border-color 0.2s;
+  display: flex; align-items: center;
+  background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: 12px; padding: 0 12px; gap: 8px; transition: border-color 0.2s;
 }
 .search-wrap:focus-within { border-color: var(--blue); }
 .search-icon { font-size: 15px; flex-shrink: 0; }
 .search-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  padding: 11px 0;
-  font-size: 15px;
-  color: var(--text);
-  outline: none;
+  flex: 1; border: none; background: transparent;
+  padding: 11px 0; font-size: 15px; color: var(--text); outline: none;
 }
 .search-input::placeholder { color: var(--text-muted); }
-.search-clear {
-  background: none; border: none;
-  color: var(--text-muted); font-size: 13px;
-  cursor: pointer; padding: 4px;
-  flex-shrink: 0;
-}
+.search-clear { background: none; border: none; color: var(--text-muted); font-size: 13px; cursor: pointer; padding: 4px; flex-shrink: 0; }
+.search-count { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 14px; padding: 0 2px; }
 
-.search-count {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-weight: 600;
-  margin-bottom: 14px;
-  padding: 0 2px;
-}
-
-/* Empty search state */
-.empty-search {
-  text-align: center;
-  padding: 60px 20px;
-}
-.empty-icon  { font-size: 48px; margin-bottom: 12px; }
+.empty-search { text-align: center; padding: 60px 20px; }
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
 .empty-title { font-size: 17px; font-weight: 700; color: var(--text); }
-.empty-sub   { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
+.empty-sub { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
 
 .category-tabs {
   display: flex; gap: 8px; padding: 12px 16px;
@@ -386,17 +390,22 @@ function addToCart() {
 .cat-tab.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 
 .loading-state { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.skeleton { height: 80px; border-radius: var(--radius); background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+.skeleton {
+  height: 80px; border-radius: var(--radius);
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 .menu-sections { padding: 16px; display: flex; flex-direction: column; gap: 24px; }
 .section-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--text); }
-
 .items-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
 .item-card {
   background: var(--white); border-radius: var(--radius);
-  box-shadow: var(--shadow); overflow: hidden; cursor: pointer;
-  transition: transform .15s;
+  box-shadow: var(--shadow); overflow: hidden;
+  cursor: pointer; transition: transform .15s;
 }
 .item-card:active { transform: scale(0.98); }
 .item-img-wrap { aspect-ratio: 1; overflow: hidden; background: var(--blue-light); }
@@ -414,25 +423,20 @@ function addToCart() {
 }
 
 .cart-fab {
-  position: fixed; bottom: 80px;
-  left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
   width: calc(100% - 32px); max-width: 448px;
-  background: var(--blue); color: #fff;
-  border-radius: var(--radius); padding: 14px 20px;
-  display: flex; align-items: center; gap: 10px;
+  background: var(--blue); color: #fff; border-radius: var(--radius);
+  padding: 14px 20px; display: flex; align-items: center; gap: 10px;
   font-weight: 600; cursor: pointer;
-  box-shadow: 0 4px 16px rgba(30,136,229,0.35);
-  z-index: 50;
+  box-shadow: 0 4px 16px rgba(30,136,229,0.35); z-index: 50;
 }
 .fab-badge {
-  background: #fff; color: var(--blue);
-  width: 22px; height: 22px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
+  background: #fff; color: var(--blue); width: 22px; height: 22px;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 700;
 }
 .fab-total { margin-left: auto; }
 
-/* Modal */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.5);
   z-index: 200; display: flex; align-items: flex-end;
@@ -460,8 +464,7 @@ function addToCart() {
 .option-group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .option-group-name { font-size: 14px; font-weight: 700; }
 .required-tag { font-size: 11px; background: #fff3cd; color: #856404; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-.optional-tag  { font-size: 11px; background: var(--bg); color: var(--text-muted); padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-
+.optional-tag { font-size: 11px; background: var(--bg); color: var(--text-muted); padding: 2px 8px; border-radius: 10px; font-weight: 600; }
 .option-list { display: flex; flex-direction: column; gap: 2px; }
 .option-row {
   display: flex; align-items: center; gap: 10px;
@@ -472,28 +475,21 @@ function addToCart() {
 .option-row input { accent-color: var(--blue); width: 16px; height: 16px; }
 .option-label { flex: 1; font-size: 14px; }
 .option-price { font-size: 13px; color: var(--blue); font-weight: 600; }
-
 .notes-input {
   width: 100%; padding: 10px 12px;
   border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-  font-size: 14px; resize: none; font-family: inherit;
-  box-sizing: border-box;
+  font-size: 14px; resize: none; font-family: inherit; box-sizing: border-box;
 }
 .notes-input:focus { outline: none; border-color: var(--blue); }
-
-.modal-actions {
-  display: flex; gap: 12px; align-items: center;
-  margin-top: 24px; padding-bottom: 8px;
-}
+.modal-actions { display: flex; gap: 12px; align-items: center; margin-top: 24px; padding-bottom: 8px; }
 .qty-control {
   display: flex; align-items: center; gap: 14px;
-  background: var(--bg); border-radius: var(--radius-sm);
-  padding: 8px 16px;
+  background: var(--bg); border-radius: var(--radius-sm); padding: 8px 16px;
 }
 .qty-control button {
-  background: none; border: none; font-size: 20px;
-  cursor: pointer; color: var(--blue); font-weight: 700;
-  width: 24px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; font-size: 20px; cursor: pointer;
+  color: var(--blue); font-weight: 700; width: 24px;
+  display: flex; align-items: center; justify-content: center;
 }
 .qty-control span { font-size: 16px; font-weight: 700; min-width: 20px; text-align: center; }
 .modal-add-btn { flex: 1; padding: 14px; }
