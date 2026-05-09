@@ -5,7 +5,7 @@
         <h1 class="page-title">Vouchers</h1>
         <p class="page-sub">{{ vouchers.length }} voucher{{ vouchers.length!==1?'s':'' }}</p>
       </div>
-      <button class="btn btn-primary" @click="openCreate">+ Create Voucher</button>
+      <button v-if="auth.isManager" class="btn btn-primary" @click="openCreate">+ Create Voucher</button>
     </div>
 
     <!-- Controls -->
@@ -58,10 +58,12 @@
                 <td style="font-size:12px;color:var(--muted)">{{ v.expires_at ? fmtDate(v.expires_at) : '—' }}</td>
                 <td>
                   <div style="display:flex;gap:6px">
-                    <button class="btn btn-ghost" style="font-size:12px;padding:5px 10px" @click="openEdit(v)">Edit</button>
-                    <button :class="['btn', v.is_active ? 'btn-ghost' : 'btn-primary']" style="font-size:12px;padding:5px 10px" @click="toggle(v)">
-                      {{ v.is_active ? 'Disable' : 'Enable' }}
-                    </button>
+                    <template v-if="auth.isManager">
+                      <button class="btn btn-ghost" style="font-size:12px;padding:5px 10px" @click="openEdit(v)">Edit</button>
+                      <button :class="['btn', v.is_active ? 'btn-ghost' : 'btn-primary']" style="font-size:12px;padding:5px 10px" @click="toggle(v)">
+                        {{ v.is_active ? 'Disable' : 'Enable' }}
+                      </button>
+                    </template>
                     <button class="btn btn-ghost" style="font-size:12px;padding:5px 10px" @click="toggleHistory(v.id)">
                       History{{ v.used_count>0 ? ` (${v.used_count})` : '' }}
                     </button>
@@ -99,8 +101,8 @@
       </div>
     </div>
 
-    <!-- Modal -->
-    <div v-if="modal.open" class="backdrop" @click.self="modal.open=false">
+    <!-- Modal (manager only) -->
+    <div v-if="modal.open && auth.isManager" class="backdrop" @click.self="modal.open=false">
       <div class="modal">
         <div class="mhdr">
           <h3>{{ modal.editing ? 'Edit Voucher' : 'Create Voucher' }}</h3>
@@ -190,7 +192,9 @@
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
 import api from '@/services/api'
+import { useAuthStore } from '@/stores/auth'
 
+const auth = useAuthStore()
 const vouchers    = ref([])
 const loading     = ref(true)
 const activeFilter = ref('all')
@@ -289,12 +293,14 @@ async function save() {
       vouchers.value.unshift(c)
     }
     modal.open=false
-  } catch (e) { modal.error=e.response?.data?.error||'Failed to save' }
+  } catch (e) { modal.error=e.response?.data?.error||e.error||'Failed to save' }
   finally { modal.saving=false }
 }
 
 onMounted(async () => {
-  await Promise.all([load(), api.get('/admin/menu').then(m=>{menuCats.value=m}).catch(()=>{})])
+  const calls = [load()]
+  if (auth.isManager) calls.push(api.get('/admin/menu').then(m=>{ menuCats.value=m }).catch(()=>{}))
+  await Promise.all(calls)
 })
 </script>
 
