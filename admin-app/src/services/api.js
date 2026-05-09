@@ -1,57 +1,43 @@
-import axios from 'axios'
+import { useAuthStore } from '@/stores/auth'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'https://bingchun.up.railway.app/api'
+const BASE = import.meta.env.VITE_API_URL || 'https://bingchun.up.railway.app/api'
 
-const client = axios.create({ baseURL: BASE_URL })
+async function request(method, path, data = null) {
+  const auth = useAuthStore()
+  const headers = { 'Content-Type': 'application/json' }
+  if (auth.token) headers['Authorization'] = `Bearer ${auth.token}`
 
-// Attach token to every request
-client.interceptors.request.use(config => {
-  const token = localStorage.getItem('admin_token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
-  return config
-})
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: data ? JSON.stringify(data) : undefined,
+  })
 
-// Response interceptor — handle auth errors
-client.interceptors.response.use(
-  res => res.data,
-  async err => {
-    const status = err.response?.status
-    const code = err.response?.data?.code
+  const json = await res.json()
 
-    // Token expired — try refresh
-    if (status === 401 && code === 'TOKEN_EXPIRED') {
-      // Admin app doesn't store refresh token — just log out
-      localStorage.removeItem('admin_user')
-      localStorage.removeItem('admin_token')
-      window.location.href = '/login'
-      return Promise.reject(err)
-    }
-
-    // 401 generic — not logged in
-    if (status === 401) {
-      localStorage.removeItem('admin_user')
-      localStorage.removeItem('admin_token')
-      window.location.href = '/login'
-      return Promise.reject(err)
-    }
-
-    // 403 — logged in but insufficient role
-    if (status === 403) {
-      // Redirect to the page they do have access to, with a toast flag
-      sessionStorage.setItem('forbidden_toast', '1')
-      window.location.href = '/orders'
-      return Promise.reject(err)
-    }
-
-    return Promise.reject(err)
+  if (res.status === 401) {
+    auth.logout()
+    window.location.href = '/login'
+    return Promise.reject({ status: 401, data: json })
   }
-)
 
-const api = {
-  get:    (url, params) => client.get(url, { params }),
-  post:   (url, data)   => client.post(url, data),
-  patch:  (url, data)   => client.patch(url, data),
-  delete: (url)         => client.delete(url),
+  if (res.status === 403) {
+    sessionStorage.setItem('forbidden_toast', '1')
+    window.location.href = '/orders'
+    return Promise.reject({ status: 403, data: json })
+  }
+
+  if (!res.ok) throw { response: { data: json }, status: res.status }
+  return json
 }
 
-export default api
+export default {
+  get:    (path, params) => {
+    const url = params ? `${path}?${new URLSearchParams(params)}` : path
+    return request('GET', url)
+  },
+  post:   (path, data)   => request('POST',   path, data),
+  patch:  (path, data)   => request('PATCH',  path, data),
+  put:    (path, data)   => request('PUT',    path, data),
+  delete: (path)         => request('DELETE', path),
+}
