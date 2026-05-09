@@ -1,76 +1,91 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://bingchun.up.railway.app/api'
 
 const client = axios.create({ baseURL: BASE_URL })
 
-// Attach access token to every request
+// Attach token
 client.interceptors.request.use(config => {
-  const token = localStorage.getItem('accessToken')
-  config.headers = config.headers || {}
+  const token = localStorage.getItem('token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
-// Auto-refresh on 401 TOKEN_EXPIRED
 let isRefreshing = false
-let waitingQueue = []
+let failedQueue = []
+
+function processQueue(error, token = null) {
+  failedQueue.forEach(p => error ? p.reject(error) : p.resolve(token))
+  failedQueue = []
+}
 
 client.interceptors.response.use(
   res => res.data,
   async err => {
-    const original = err.config
-    if (
-      err.response?.status === 401 &&
-      err.response?.data?.code === 'TOKEN_EXPIRED' &&
-      !original._retry
-    ) {
-      original._retry = true
+    const status = err.response?.status
+    const code = err.response?.data?.code
+    const originalRequest = err.config
 
+    // Token expired — attempt refresh
+    if (status === 401 && code === 'TOKEN_EXPIRED' && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
-          waitingQueue.push({ resolve, reject })
+          failedQueue.push({ resolve, reject })
         }).then(token => {
-          original.headers = original.headers || {}
-          original.headers.Authorization = `Bearer ${token}`
-          return client(original)
+          originalRequest.headers.Authorization = `Bearer ${token}`
+          return client(originalRequest)
         })
       }
 
+      originalRequest._retry = true
       isRefreshing = true
-      const refreshToken = localStorage.getItem('refreshToken')
 
       try {
+        const refreshToken = localStorage.getItem('refreshToken')
+        if (!refreshToken) throw new Error('No refresh token')
+
         const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken })
-        localStorage.setItem('accessToken', data.accessToken)
-        localStorage.setItem('refreshToken', data.refreshToken)
-
-        waitingQueue.forEach(p => p.resolve(data.accessToken))
-        waitingQueue = []
-
-        original.headers = original.headers || {}
-        original.headers.Authorization = `Bearer ${data.accessToken}`
-        return client(original)
-      } catch {
-        waitingQueue.forEach(p => p.reject())
-        waitingQueue = []
-        localStorage.clear()
+        localStorage.setItem('token', data.accessToken)
+        client.defaults.headers.common['Authorization'] = `Bearer ${data.accessToken}`
+        processQueue(null, data.accessToken)
+        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
+        return client(originalRequest)
+      } catch (refreshErr) {
+        processQueue(refreshErr, null)
+        localStorage.removeItem('token')
+        localStorage.removeItem('refreshToken')
         window.location.href = '/login'
+        return Promise.reject(refreshErr)
       } finally {
         isRefreshing = false
       }
+    }
+
+    // 401 generic
+    if (status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('refreshToken')
+      window.location.href = '/login'
+      return Promise.reject(err)
+    }
+
+    // 403 — account deactivated or access denied
+    if (status === 403) {
+      const msg = err.response?.data?.error || 'Access denied'
+      // If requiresOtp — let the caller handle it
+      if (err.response?.data?.requiresOtp) return Promise.reject(err.response.data)
+      // Otherwise surface cleanly
+      return Promise.reject({ error: msg, status: 403 })
     }
 
     return Promise.reject(err.response?.data || err)
   }
 )
 
-// Convenience wrappers
 const api = {
   get:    (url, params) => client.get(url, { params }),
   post:   (url, data)   => client.post(url, data),
   patch:  (url, data)   => client.patch(url, data),
-  put:    (url, data)   => client.put(url, data),
   delete: (url)         => client.delete(url),
 }
 
