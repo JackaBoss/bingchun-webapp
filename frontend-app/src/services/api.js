@@ -6,7 +6,7 @@ const client = axios.create({ baseURL: BASE_URL })
 
 // Attach token
 client.interceptors.request.use(config => {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('accessToken')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -45,14 +45,14 @@ client.interceptors.response.use(
         if (!refreshToken) throw new Error('No refresh token')
 
         const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken })
-        localStorage.setItem('token', data.accessToken)
+        localStorage.setItem('accessToken', data.accessToken)
         client.defaults.headers.common['Authorization'] = `Bearer ${data.accessToken}`
         processQueue(null, data.accessToken)
         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
         return client(originalRequest)
       } catch (refreshErr) {
         processQueue(refreshErr, null)
-        localStorage.removeItem('token')
+        localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
         window.location.href = '/login'
         return Promise.reject(refreshErr)
@@ -63,7 +63,7 @@ client.interceptors.response.use(
 
     // 401 generic
     if (status === 401) {
-      localStorage.removeItem('token')
+      localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')
       window.location.href = '/login'
       return Promise.reject(err)
