@@ -54,6 +54,7 @@ client.interceptors.response.use(
         processQueue(refreshErr, null)
         localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
+        localStorage.removeItem('user')
         window.location.href = '/login'
         return Promise.reject(refreshErr)
       } finally {
@@ -65,6 +66,7 @@ client.interceptors.response.use(
     if (status === 401) {
       localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')
+      localStorage.removeItem('user')
       window.location.href = '/login'
       return Promise.reject(err)
     }
