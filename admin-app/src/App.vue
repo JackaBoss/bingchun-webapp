@@ -38,6 +38,9 @@
           <!-- Manager only -->
           <template v-if="auth.isManager">
             <div class="nav-divider"></div>
+            <router-link to="/outlets" class="nav-item" active-class="active" @click="navOpen = false">
+              <span>🏪</span> Outlets
+            </router-link>
             <router-link to="/walkin-sales" class="nav-item" active-class="active" @click="navOpen = false">
               <span>📝</span> Walk-in Sales
             </router-link>
@@ -118,6 +121,7 @@ const titleMap = {
   '/walkin-sales': 'Walk-in Sales',
   '/reports': 'Sales Report',
   '/staff': 'Staff',
+  '/outlets': 'Outlets',
 }
 
 const pageTitle = computed(() => {
@@ -247,6 +251,7 @@ tr:hover td { background: #fafafa; }
 .btn-ghost:hover:not(:disabled) { background: var(--bg); }
 .btn-danger { background: #fee2e2; color: var(--red); }
 .btn-danger:hover:not(:disabled) { background: #fecaca; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
 .input { width: 100%; min-width: 0; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 14px; outline: none; transition: border-color .15s; background: #fff; }
 .input:focus { border-color: var(--blue); }
 </style>

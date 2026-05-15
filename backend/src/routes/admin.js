@@ -16,8 +16,100 @@ function outletScope(user, tableAlias = 'o') {
 // ── GET /api/admin/outlets ──────────────────────────────────────────────
 router.get('/outlets', requireManager, async (req, res) => {
   try {
+    let sql = 'SELECT id, store_code, name, address, is_open, close_reason FROM outlets';
+    const params = [];
+    if (req.user.outlet_id) {
+      sql += ' WHERE id = ?';
+      params.push(req.user.outlet_id);
+    }
+    sql += ' ORDER BY store_code';
+    const [rows] = await db.query(sql, params);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── PATCH /api/admin/outlets/:id/toggle ─────────────────────────────────
+router.patch('/outlets/:id/toggle', requireManager, async (req, res) => {
+  const outletId = req.params.id;
+  if (req.user.outlet_id && req.user.outlet_id != outletId) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const { is_open, close_reason } = req.body;
+  try {
+    await db.query(
+      'UPDATE outlets SET is_open = ?, close_reason = ? WHERE id = ?',
+      [is_open ? 1 : 0, is_open ? null : (close_reason || null), outletId]
+    );
+    const [[outlet]] = await db.query(
+      'SELECT id, store_code, name, address, is_open, close_reason FROM outlets WHERE id = ?',
+      [outletId]
+    );
+    if (!outlet) return res.status(404).json({ error: 'Outlet not found' });
+    res.json(outlet);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── GET /api/admin/outlets/:id/hours ────────────────────────────────────
+router.get('/outlets/:id/hours', requireManager, async (req, res) => {
+  const outletId = req.params.id;
+  if (req.user.outlet_id && req.user.outlet_id != outletId) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  try {
+    let [rows] = await db.query(
+      'SELECT day_of_week, open_time, close_time, is_closed FROM outlet_hours WHERE outlet_id = ? ORDER BY day_of_week',
+      [outletId]
+    );
+    // Auto-seed if new outlet has no rows yet
+    if (rows.length === 0) {
+      await db.query(
+        `INSERT IGNORE INTO outlet_hours (outlet_id, day_of_week, open_time, close_time, is_closed)
+         SELECT ?, d.n, '10:30:00', '22:00:00', 0
+         FROM (SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3
+               UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) d`,
+        [outletId]
+      );
+      [rows] = await db.query(
+        'SELECT day_of_week, open_time, close_time, is_closed FROM outlet_hours WHERE outlet_id = ? ORDER BY day_of_week',
+        [outletId]
+      );
+    }
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── PUT /api/admin/outlets/:id/hours ────────────────────────────────────
+router.put('/outlets/:id/hours', requireManager, async (req, res) => {
+  const outletId = req.params.id;
+  if (req.user.outlet_id && req.user.outlet_id != outletId) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const { hours } = req.body;
+  if (!Array.isArray(hours) || hours.length !== 7) {
+    return res.status(400).json({ error: 'hours must be an array of 7 days' });
+  }
+  try {
+    for (const h of hours) {
+      const closed = h.is_closed ? 1 : 0;
+      await db.query(
+        `INSERT INTO outlet_hours (outlet_id, day_of_week, open_time, close_time, is_closed)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE open_time = VALUES(open_time), close_time = VALUES(close_time), is_closed = VALUES(is_closed)`,
+        [outletId, h.day_of_week, closed ? null : (h.open_time || null), closed ? null : (h.close_time || null), closed]
+      );
+    }
     const [rows] = await db.query(
-      'SELECT id, store_code, name, address, is_open FROM outlets ORDER BY store_code'
+      'SELECT day_of_week, open_time, close_time, is_closed FROM outlet_hours WHERE outlet_id = ? ORDER BY day_of_week',
+      [outletId]
     );
     res.json(rows);
   } catch (err) {
@@ -145,10 +237,9 @@ router.patch('/orders/:id/status', requireAdmin, async (req, res) => {
     await conn.commit();
     const [[updated]] = await db.query('SELECT * FROM orders WHERE id = ?', [order.id]);
 
-    // Notify on key status transitions
     if (['paid', 'ready', 'cancelled'].includes(status)) {
       const [[customer]] = await db.query('SELECT name FROM users WHERE id = ?', [order.user_id]);
-      const [[outlet]]   = await db.query('SELECT name FROM outlets WHERE id = ?', [order.outlet_id]);
+      const [[outlet]] = await db.query('SELECT name FROM outlets WHERE id = ?', [order.outlet_id]);
       notifyStatusChange({
         order: updated,
         status,
@@ -233,8 +324,8 @@ router.get('/orders/:id/receipt', requireAdmin, async (req, res) => {
     receipt += center(`Customer: ${order.customer_name}`) + '\n' + line + '\n';
     for (const item of items) {
       receipt += lr(`${item.quantity}x ${item.item_name}`, `RM${(item.unit_price * item.quantity).toFixed(2)}`) + '\n';
-      if (item.options.length > 0) receipt += `  ${item.options.map(o => o.label).join(', ')}\n`;
-      if (item.notes) receipt += `  Note: ${item.notes}\n`;
+      if (item.options.length > 0) receipt += ` ${item.options.map(o => o.label).join(', ')}\n`;
+      if (item.notes) receipt += ` Note: ${item.notes}\n`;
     }
     receipt += dash + '\n' + lr('Subtotal', `RM${parseFloat(order.subtotal).toFixed(2)}`) + '\n';
     if (parseFloat(order.discount) > 0) receipt += lr('Points Discount', `-RM${parseFloat(order.discount).toFixed(2)}`) + '\n';
@@ -344,7 +435,6 @@ router.patch('/members/:id', requireManager, async (req, res) => {
 // STAFF MANAGEMENT (store_manager only)
 // ══════════════════════════════════════════════════════════════════════════
 
-// GET /api/admin/staff — list staff accounts
 router.get('/staff', requireManager, async (req, res) => {
   try {
     const scope = outletScope(req.user, 'u');
@@ -365,7 +455,6 @@ router.get('/staff', requireManager, async (req, res) => {
   }
 });
 
-// POST /api/admin/staff — create staff account
 router.post('/staff', requireManager, async (req, res) => {
   const { name, phone, password, role, outlet_id } = req.body;
   if (!name || !phone || !password || !role) {
@@ -374,7 +463,6 @@ router.post('/staff', requireManager, async (req, res) => {
   if (!['staff', 'store_manager'].includes(role)) {
     return res.status(400).json({ error: 'role must be staff or store_manager' });
   }
-  // Manager scoped to outlet can only create staff for that same outlet
   const effectiveOutletId = req.user.outlet_id || outlet_id || null;
   try {
     const [[existing]] = await db.query('SELECT id FROM users WHERE phone = ?', [phone]);
@@ -399,7 +487,6 @@ router.post('/staff', requireManager, async (req, res) => {
   }
 });
 
-// PATCH /api/admin/staff/:id — edit staff account
 router.patch('/staff/:id', requireManager, async (req, res) => {
   const { name, phone, password, role, outlet_id, is_active } = req.body;
   const fields = []; const values = [];
