@@ -69,9 +69,7 @@
 
     <!-- Actions -->
     <div class="card section-card actions-card">
-      <button class="action-row" @click="router.push('/orders')">
-        <span>📋 My orders</span><span>›</span>
-      </button>
+
       <button class="action-row logout" @click="doLogout">
         <span>🚪 Log out</span><span>›</span>
       </button>

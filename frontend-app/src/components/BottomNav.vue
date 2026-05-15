@@ -19,7 +19,6 @@ const route  = useRoute()
 
 const tabs = [
   { name: 'menu',    routeName: 'Menu',    path: '/',        icon: '🧋', label: 'Menu'    },
-  { name: 'orders',  routeName: 'Orders',  path: '/orders',  icon: '📋', label: 'Orders'  },
   { name: 'profile', routeName: 'Profile', path: '/profile', icon: '👤', label: 'Profile' },
 ]
 </script>

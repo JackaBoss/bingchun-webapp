@@ -1,14 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-// Import views
-import LoginView from '@/views/LoginView.vue'
-import MenuView from '@/views/MenuView.vue'
-import CartView from '@/views/CartView.vue'
-import OrdersView from '@/views/OrdersView.vue'
-import OrderDetailView from '@/views/OrderDetailView.vue'
-import ProfileView from '@/views/ProfileView.vue'
-import ForceLogoutView from '@/views/ForceLogoutView.vue'  // ADD THIS
+import LoginView      from '@/views/LoginView.vue'
+import MenuView       from '@/views/MenuView.vue'
+import ProfileView    from '@/views/ProfileView.vue'
+import ForceLogoutView from '@/views/ForceLogoutView.vue'
 
 const routes = [
   {
@@ -18,7 +14,7 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
-    path: '/force-logout',  // ADD THIS ROUTE
+    path: '/force-logout',
     name: 'ForceLogout',
     component: ForceLogoutView,
     meta: { requiresAuth: false }
@@ -30,24 +26,6 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/cart',
-    name: 'Cart',
-    component: CartView,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/orders',
-    name: 'Orders',
-    component: OrdersView,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/orders/:id',
-    name: 'OrderDetail',
-    component: OrderDetailView,
-    meta: { requiresAuth: true }
-  },
-  {
     path: '/profile',
     name: 'Profile',
     component: ProfileView,
@@ -55,7 +33,12 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/menu'
+    redirect: '/profile'
+  },
+  // Catch-all: send unknown routes to profile (or login if unauthenticated)
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/profile'
   }
 ]
 
@@ -64,20 +47,16 @@ const router = createRouter({
   routes
 })
 
-// Guard to check authentication
 router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore()
-  const requiresAuth = to.meta.requiresAuth
+  const auth = useAuthStore()
 
-  // If route requires auth and user not authenticated
-  if (requiresAuth && !authStore.isAuthenticated) {
+  if (to.meta.requiresAuth && !auth.isAuthenticated) {
     next('/login')
     return
   }
 
-  // If user authenticated but trying to go to login
-  if (to.path === '/login' && authStore.isAuthenticated) {
-    next('/menu')
+  if (to.path === '/login' && auth.isAuthenticated) {
+    next('/profile')
     return
   }
 
@@ -86,9 +65,8 @@ router.beforeEach((to, from, next) => {
 
 export default router
 
-// FUNCTION TO TRIGGER FORCE LOGOUT FROM ANYWHERE
 export const triggerForceLogout = (router) => {
-  const authStore = useAuthStore()
-  authStore.forceLogout()
+  const auth = useAuthStore()
+  auth.forceLogout()
   router.push('/force-logout')
 }
